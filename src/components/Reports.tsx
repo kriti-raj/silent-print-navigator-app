@@ -37,7 +37,7 @@ const Reports: React.FC = () => {
   const [endDate, setEndDate] = useState('');
   const [showUpiSettings, setShowUpiSettings] = useState(false);
   const [upiSettings, setUpiSettings] = useState({
-    upiLink: 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=${amount}&cu=INR'
+    upiLink: 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=100&cu=INR'
   });
 
   useEffect(() => {
@@ -225,11 +225,11 @@ ${reportData.recentInvoices.map(invoice =>
                 id="upiLink"
                 value={upiSettings.upiLink}
                 onChange={(e) => setUpiSettings({ ...upiSettings, upiLink: e.target.value })}
-                placeholder="upi://pay?pa=your@upi&pn=Your+Name&tn=Payment&am=${amount}&cu=INR"
+                placeholder="upi://pay?pa=your@upi&pn=Your+Name&tn=Payment&am=100&cu=INR"
                 rows={3}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Use ${amount} placeholder for invoice amount. This will be replaced with actual amount during QR generation.
+                The amount in this link will be replaced with the actual invoice amount during QR generation.
               </p>
             </div>
             <div className="flex gap-2">
