@@ -1,10 +1,12 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChart3, TrendingUp, IndianRupee, Calendar, Download, FileText, Users, Package, Sparkles } from "lucide-react";
+import { BarChart3, TrendingUp, IndianRupee, Calendar, Download, FileText, Users, Package, Sparkles, QrCode, Settings } from "lucide-react";
 
 interface ReportData {
   totalRevenue: number;
@@ -34,9 +36,19 @@ const Reports: React.FC = () => {
   const [dateRange, setDateRange] = useState('30');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [showUpiSettings, setShowUpiSettings] = useState(false);
+  const [upiSettings, setUpiSettings] = useState({
+    upiLink: 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=${amount}&cu=INR'
+  });
 
   useEffect(() => {
     generateReport();
+    
+    // Load UPI settings
+    const savedUpiSettings = localStorage.getItem('upiSettings');
+    if (savedUpiSettings) {
+      setUpiSettings(JSON.parse(savedUpiSettings));
+    }
   }, [dateRange, startDate, endDate]);
 
   const generateReport = () => {
@@ -176,8 +188,59 @@ ${reportData.recentInvoices.map(invoice =>
     URL.revokeObjectURL(url);
   };
 
+  const saveUpiSettings = () => {
+    localStorage.setItem('upiSettings', JSON.stringify(upiSettings));
+    setShowUpiSettings(false);
+  };
+
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold">Reports & Analytics</h2>
+          <p className="text-muted-foreground">Analyze your business performance</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowUpiSettings(true)}>
+            <QrCode className="mr-2 h-4 w-4" />
+            UPI Settings
+          </Button>
+        </div>
+      </div>
+
+      {showUpiSettings && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              UPI Payment Settings
+            </CardTitle>
+            <CardDescription>
+              Configure your UPI payment link for QR code generation
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="upiLink">UPI Payment Link</Label>
+              <Textarea
+                id="upiLink"
+                value={upiSettings.upiLink}
+                onChange={(e) => setUpiSettings({ ...upiSettings, upiLink: e.target.value })}
+                placeholder="upi://pay?pa=your@upi&pn=Your+Name&tn=Payment&am=${amount}&cu=INR"
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Use ${amount} placeholder for invoice amount. This will be replaced with actual amount during QR generation.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={saveUpiSettings}>Save Settings</Button>
+              <Button variant="outline" onClick={() => setShowUpiSettings(false)}>Cancel</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Report Filters</CardTitle>

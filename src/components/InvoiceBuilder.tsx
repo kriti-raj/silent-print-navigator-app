@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,15 +16,23 @@ interface Product {
   basePrice?: number;
   hasVariableColors: boolean;
   predefinedColors?: string[];
-  volumes?: string[];
   unit: 'liters' | 'kg' | 'pieces';
+}
+
+interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  address: string;
+  notes?: string;
+  createdAt: string;
 }
 
 interface InvoiceItem {
   id: string;
   productName: string;
   colorCode: string;
-  volume: string;
   finalName: string;
   quantity: number;
   rate: number;
@@ -53,6 +62,7 @@ interface InvoiceBuilderProps {
 
 const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [gstEnabled, setGstEnabled] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'edit' | 'view'>('edit');
   const [createdInvoice, setCreatedInvoice] = useState<SavedInvoice | null>(null);
@@ -69,7 +79,6 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     id: '1',
     productName: '',
     colorCode: '',
-    volume: '',
     finalName: '',
     quantity: 1,
     rate: 0,
@@ -94,6 +103,11 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     if (savedProducts) {
       setProducts(JSON.parse(savedProducts));
     }
+
+    const savedCustomers = localStorage.getItem('customers');
+    if (savedCustomers) {
+      setCustomers(JSON.parse(savedCustomers));
+    }
   }, []);
 
   const addItem = () => {
@@ -101,7 +115,6 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       id: Date.now().toString(),
       productName: '',
       colorCode: '',
-      volume: '',
       finalName: '',
       quantity: 1,
       rate: 0,
@@ -139,7 +152,25 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
 
   const generateInvoiceNumber = () => {
     const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
-    return `INV-${String(invoices.length + 1).padStart(4, '0')}`;
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = String(now.getFullYear()).slice(-2);
+    const invoiceCount = invoices.length + 1;
+    
+    return `${day}${month}${year}${String(invoiceCount).padStart(3, '0')}`;
+  };
+
+  const handleCustomerSelect = (customerName: string) => {
+    const selectedCustomer = customers.find(c => c.name === customerName);
+    if (selectedCustomer) {
+      setCustomerDetails({
+        name: selectedCustomer.name,
+        phone: selectedCustomer.phone,
+        address: selectedCustomer.address,
+        email: selectedCustomer.email || ''
+      });
+    }
   };
 
   const handleSaveInvoice = () => {
@@ -159,7 +190,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       tax,
       total,
       gstEnabled,
-      status: paymentStatus === 'paid' ? 'paid' : 'sent'
+      status: paymentStatus === 'paid' ? 'paid' : 'draft'
     };
 
     const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
@@ -175,8 +206,20 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     });
   };
 
+  const generateUPIQR = (amount: number) => {
+    const upiSettings = JSON.parse(localStorage.getItem('upiSettings') || '{}');
+    const upiLink = upiSettings.upiLink || 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=${amount}&cu=INR';
+    const finalLink = upiLink.replace('${amount}', amount.toString());
+    
+    // Generate QR code data URL (you would use a QR library in real implementation)
+    return `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="white"/><text x="50" y="50" text-anchor="middle" fill="black" font-size="8">UPI QR</text></svg>`)}`;
+  };
+
   const handlePrint = () => {
     if (!createdInvoice) return;
+
+    const { total } = calculateTotals();
+    const upiQR = generateUPIQR(total);
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -196,6 +239,8 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
             .totals { margin-left: auto; width: 300px; }
             .total-row { display: flex; justify-content: space-between; margin: 5px 0; }
             .final-total { font-weight: bold; font-size: 1.2em; border-top: 2px solid #333; padding-top: 10px; }
+            .qr-section { text-align: center; margin-top: 20px; }
+            .qr-section img { height: 80px; margin: 5px; }
             @media print {
               body { margin: 0; }
               .no-print { display: none; }
@@ -230,7 +275,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
             <tbody>
               ${createdInvoice.items.map(item => `
                 <tr>
-                  <td>${item.finalName || `${item.productName} - ${item.colorCode} - ${item.volume}`}</td>
+                  <td>${item.finalName || `${item.productName} - ${item.colorCode}`}</td>
                   <td>${item.quantity}</td>
                   <td>₹${item.rate.toFixed(2)}</td>
                   <td>₹${item.total.toFixed(2)}</td>
@@ -257,6 +302,11 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
           </div>
           
           ${createdInvoice.notes ? `<p><strong>Notes:</strong> ${createdInvoice.notes}</p>` : ''}
+          
+          <div class="qr-section">
+            <p>Scan to Pay</p>
+            <img src="${upiQR}" alt="UPI Payment QR">
+          </div>
         </body>
       </html>
     `;
@@ -268,6 +318,13 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     printWindow.onload = () => {
       printWindow.print();
       printWindow.close();
+      
+      // Update invoice status to printed
+      const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
+      const updatedInvoices = invoices.map((inv: any) => 
+        inv.id === createdInvoice.id ? { ...inv, status: 'sent' } : inv
+      );
+      localStorage.setItem('invoices', JSON.stringify(updatedInvoices));
     };
 
     toast({
@@ -338,7 +395,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                         {items.map((item) => (
                           <tr key={item.id} className="border-t">
                             <td className="p-3">
-                              {item.finalName || `${item.productName} - ${item.colorCode} - ${item.volume}`}
+                              {item.finalName || `${item.productName} - ${item.colorCode}`}
                             </td>
                             <td className="p-3">{item.quantity}</td>
                             <td className="p-3">₹{item.rate.toFixed(2)}</td>
@@ -402,6 +459,22 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
               <CardTitle>Customer Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="customerSelect">Select Customer</Label>
+                <Select onValueChange={handleCustomerSelect}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select existing customer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customers.map((customer) => (
+                      <SelectItem key={customer.id} value={customer.name}>
+                        {customer.name} - {customer.phone}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
               <div>
                 <Label htmlFor="customerName">Customer Name</Label>
                 <Input
@@ -511,20 +584,11 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                   </div>
                   
                   <div>
-                    <Label>Color</Label>
+                    <Label>Color/Description</Label>
                     <Input
                       value={item.colorCode}
                       onChange={(e) => updateItem(item.id, 'colorCode', e.target.value)}
-                      placeholder="Color"
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label>Volume</Label>
-                    <Input
-                      value={item.volume}
-                      onChange={(e) => updateItem(item.id, 'volume', e.target.value)}
-                      placeholder="Volume"
+                      placeholder="Color or description"
                     />
                   </div>
                   

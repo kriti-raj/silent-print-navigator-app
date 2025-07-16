@@ -1,262 +1,299 @@
 
 import React, { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, Users, FileText, BarChart3, Store, Plus, Wrench, TrendingUp, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import Products from "@/components/Products";
-import Customers from "@/components/Customers";
-import Invoices from "@/components/Invoices";
-import InvoiceBuilder from "@/components/InvoiceBuilder";
-import ProtectedReports from "@/components/ProtectedReports";
-import StoreSettings from "@/components/StoreSettings";
-import ConnectionInfo from "@/components/ConnectionInfo";
+import { BarChart3, Users, Package, FileText, Settings, Smartphone, Reports, Plus, TrendingUp, IndianRupee } from "lucide-react";
+import Products from '../components/Products';
+import Customers from '../components/Customers';
+import Invoices from '../components/Invoices';
+import InvoiceBuilder from '../components/InvoiceBuilder';
+import ProtectedReports from '../components/ProtectedReports';
+import StoreSettings from '../components/StoreSettings';
+import Mobile from './Mobile';
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState("dashboard");
-  const [showInvoiceBuilder, setShowInvoiceBuilder] = useState(false);
-  const [highlightInvoiceId, setHighlightInvoiceId] = useState<string | undefined>();
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-  const handleCreateInvoice = () => {
-    setShowInvoiceBuilder(true);
-  };
+  React.useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
-  const handleCloseInvoiceBuilder = (newInvoiceId?: string) => {
-    setShowInvoiceBuilder(false);
-    if (newInvoiceId) {
-      setHighlightInvoiceId(newInvoiceId);
-      setActiveTab("invoices");
-    }
-  };
+  if (isMobile) {
+    return <Mobile />;
+  }
 
-  // Quick stats for dashboard (removed today's revenue)
-  const getQuickStats = () => {
-    const products = JSON.parse(localStorage.getItem('products') || '[]');
-    const customers = JSON.parse(localStorage.getItem('customers') || '[]');
+  const getDashboardStats = () => {
     const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
+    const customers = JSON.parse(localStorage.getItem('customers') || '[]');
+    const products = JSON.parse(localStorage.getItem('products') || '[]');
+
+    const totalRevenue = invoices.reduce((sum: number, inv: any) => sum + inv.total, 0);
     const todayInvoices = invoices.filter((inv: any) =>
       new Date(inv.date).toDateString() === new Date().toDateString()
     );
+    const todayRevenue = todayInvoices.reduce((sum: number, inv: any) => sum + inv.total, 0);
 
     return {
-      totalProducts: products.length,
+      totalRevenue,
+      totalInvoices: invoices.length,
       totalCustomers: customers.length,
-      todayInvoices: todayInvoices.length,
-      totalInvoices: invoices.length
+      totalProducts: products.length,
+      todayRevenue,
+      todayInvoices: todayInvoices.length
     };
   };
 
-  if (showInvoiceBuilder) {
-    return <InvoiceBuilder onClose={handleCloseInvoiceBuilder} />;
-  }
+  const stats = getDashboardStats();
 
-  const stats = getQuickStats();
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'products':
+        return <Products />;
+      case 'customers':
+        return <Customers />;
+      case 'invoices':
+        return <Invoices onCreateNew={() => setActiveTab('create-invoice')} />;
+      case 'create-invoice':
+        return <InvoiceBuilder onClose={(newInvoiceId) => {
+          setActiveTab('invoices');
+          if (newInvoiceId) {
+            // Optionally handle the new invoice ID
+          }
+        }} />;
+      case 'reports':
+        return <ProtectedReports />;
+      case 'settings':
+        return <StoreSettings />;
+      default:
+        return (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+                <p className="text-muted-foreground">
+                  Welcome to your billing management system
+                </p>
+              </div>
+              <Button onClick={() => setActiveTab('create-invoice')}>
+                <Plus className="mr-2 h-4 w-4" />
+                Create Invoice
+              </Button>
+            </div>
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="container mx-auto p-6">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-primary mb-2">Billing Buddy</h1>
-            <p className="text-lg text-muted-foreground">Complete Billing & Inventory Management System</p>
-          </div>
-          <div className="flex gap-3">
-            <Button 
-              onClick={handleCreateInvoice}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Create Invoice
-            </Button>
-            <Button 
-              variant="outline"
-              onClick={() => window.open('/mobile', '_blank')}
-            >
-              <Smartphone className="mr-2 h-4 w-4" />
-              Mobile View
-            </Button>
-          </div>
-        </div>
-
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7 lg:w-fit lg:grid-cols-7">
-            <TabsTrigger value="dashboard" className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" />
-              Dashboard
-            </TabsTrigger>
-            <TabsTrigger value="products" className="flex items-center gap-2">
-              <Package className="h-4 w-4" />
-              Products
-            </TabsTrigger>
-            <TabsTrigger value="customers" className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Customers
-            </TabsTrigger>
-            <TabsTrigger value="invoices" className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Invoices
-            </TabsTrigger>
-            <TabsTrigger value="reports" className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Reports
-            </TabsTrigger>
-            <TabsTrigger value="settings" className="flex items-center gap-2">
-              <Store className="h-4 w-4" />
-              Store
-            </TabsTrigger>
-            <TabsTrigger value="connection" className="flex items-center gap-2">
-              <Wrench className="h-4 w-4" />
-              Connection
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="dashboard" className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-              <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium opacity-90">Total Products</CardTitle>
-                  <Package className="h-4 w-4 opacity-80" />
+                  <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                  <IndianRupee className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{stats.totalProducts}</div>
-                  <p className="text-xs opacity-80">
-                    Active inventory items
+                  <div className="text-2xl font-bold">₹{stats.totalRevenue.toFixed(2)}</div>
+                  <p className="text-xs text-muted-foreground">
+                    From {stats.totalInvoices} invoices
                   </p>
                 </CardContent>
               </Card>
-              
-              <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white">
+
+              <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium opacity-90">Total Customers</CardTitle>
-                  <Users className="h-4 w-4 opacity-80" />
+                  <CardTitle className="text-sm font-medium">Total Invoices</CardTitle>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.totalInvoices}</div>
+                  <p className="text-xs text-muted-foreground">
+                    Invoices generated
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{stats.totalCustomers}</div>
-                  <p className="text-xs opacity-80">
+                  <p className="text-xs text-muted-foreground">
                     Registered customers
                   </p>
                 </CardContent>
               </Card>
-              
-              <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+
+              <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium opacity-90">Today's Invoices</CardTitle>
-                  <FileText className="h-4 w-4 opacity-80" />
+                  <CardTitle className="text-sm font-medium">Total Products</CardTitle>
+                  <Package className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{stats.todayInvoices}</div>
-                  <p className="text-xs opacity-80">
-                    Invoices created today
-                  </p>
-                </CardContent>
-              </Card>
-              
-              <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium opacity-90">Total Invoices</CardTitle>
-                  <FileText className="h-4 w-4 opacity-80" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.totalInvoices}</div>
-                  <p className="text-xs opacity-80">
-                    All time invoices
+                  <div className="text-2xl font-bold">{stats.totalProducts}</div>
+                  <p className="text-xs text-muted-foreground">
+                    Products in inventory
                   </p>
                 </CardContent>
               </Card>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
-              <Card>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
+              <Card className="col-span-4">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
-                    Quick Actions
-                  </CardTitle>
-                  <CardDescription>Frequently used actions</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Button 
-                    onClick={handleCreateInvoice}
-                    className="w-full justify-start"
-                    variant="outline"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create New Invoice
-                  </Button>
-                  <Button 
-                    onClick={() => setActiveTab("products")}
-                    className="w-full justify-start"
-                    variant="outline"
-                  >
-                    <Package className="mr-2 h-4 w-4" />
-                    Manage Products
-                  </Button>
-                  <Button 
-                    onClick={() => setActiveTab("customers")}
-                    className="w-full justify-start"
-                    variant="outline"
-                  >
-                    <Users className="mr-2 h-4 w-4" />
-                    Manage Customers
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5" />
-                    Recent Activity
-                  </CardTitle>
-                  <CardDescription>Latest transactions and updates</CardDescription>
+                  <CardTitle>Recent Invoices</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Last invoice created</span>
-                      <span>Just now</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Products updated</span>
-                      <span>2 hours ago</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Customer added</span>
-                      <span>Yesterday</span>
-                    </div>
+                  <div className="space-y-8">
+                    {JSON.parse(localStorage.getItem('invoices') || '[]')
+                      .slice(-5)
+                      .reverse()
+                      .map((invoice: any) => (
+                        <div key={invoice.id} className="flex items-center">
+                          <div className="ml-4 space-y-1">
+                            <p className="text-sm font-medium leading-none">
+                              Invoice #{invoice.invoiceNumber}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {invoice.customerDetails.name}
+                            </p>
+                          </div>
+                          <div className="ml-auto font-medium">
+                            ₹{invoice.total.toFixed(2)}
+                          </div>
+                        </div>
+                      ))}
                   </div>
                 </CardContent>
               </Card>
+              <Card className="col-span-3">
+                <CardHeader>
+                  <CardTitle>Quick Actions</CardTitle>
+                  <CardDescription>
+                    Frequently used actions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4">
+                  <Button onClick={() => setActiveTab('create-invoice')} className="w-full">
+                    <Plus className="mr-2 h-4 w-4" />
+                    New Invoice
+                  </Button>
+                  <Button onClick={() => setActiveTab('customers')} variant="outline" className="w-full">
+                    <Users className="mr-2 h-4 w-4" />
+                    Add Customer
+                  </Button>
+                  <Button onClick={() => setActiveTab('products')} variant="outline" className="w-full">
+                    <Package className="mr-2 h-4 w-4" />
+                    Add Product
+                  </Button>
+                  <Button onClick={() => setActiveTab('reports')} variant="outline" className="w-full">
+                    <BarChart3 className="mr-2 h-4 w-4" />
+                    View Reports
+                  </Button>
+                </CardContent>
+              </Card>
             </div>
-          </TabsContent>
+          </div>
+        );
+    }
+  };
 
-          <TabsContent value="products">
-            <Products />
-          </TabsContent>
+  return (
+    <div className="flex h-screen bg-background">
+      {/* Sidebar */}
+      <div className="hidden md:flex md:w-64 md:flex-col">
+        <div className="flex flex-col flex-grow pt-5 overflow-y-auto bg-white border-r">
+          <div className="flex items-center flex-shrink-0 px-4">
+            <h1 className="text-xl font-bold text-gray-900">Billing Buddy</h1>
+          </div>
+          <div className="mt-5 flex-grow flex flex-col">
+            <nav className="flex-1 px-2 space-y-1">
+              <button
+                onClick={() => setActiveTab('dashboard')}
+                className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full text-left ${
+                  activeTab === 'dashboard'
+                    ? 'bg-gray-100 text-gray-900'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <BarChart3 className="mr-3 h-5 w-5" />
+                Dashboard
+              </button>
+              
+              <button
+                onClick={() => setActiveTab('invoices')}
+                className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full text-left ${
+                  activeTab === 'invoices' || activeTab === 'create-invoice'
+                    ? 'bg-gray-100 text-gray-900'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <FileText className="mr-3 h-5 w-5" />
+                Invoices
+              </button>
 
-          <TabsContent value="customers">
-            <Customers />
-          </TabsContent>
+              <button
+                onClick={() => setActiveTab('customers')}
+                className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full text-left ${
+                  activeTab === 'customers'
+                    ? 'bg-gray-100 text-gray-900'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <Users className="mr-3 h-5 w-5" />
+                Customers
+              </button>
 
-          <TabsContent value="invoices">
-            <Invoices 
-              onCreateNew={handleCreateInvoice}
-              highlightInvoiceId={highlightInvoiceId}
-            />
-          </TabsContent>
+              <button
+                onClick={() => setActiveTab('products')}
+                className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full text-left ${
+                  activeTab === 'products'
+                    ? 'bg-gray-100 text-gray-900'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <Package className="mr-3 h-5 w-5" />
+                Products
+              </button>
 
-          <TabsContent value="reports">
-            <ProtectedReports />
-          </TabsContent>
+              <button
+                onClick={() => setActiveTab('reports')}
+                className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full text-left ${
+                  activeTab === 'reports'
+                    ? 'bg-gray-100 text-gray-900'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <TrendingUp className="mr-3 h-5 w-5" />
+                Reports
+              </button>
 
-          <TabsContent value="settings">
-            <StoreSettings />
-          </TabsContent>
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full text-left ${
+                  activeTab === 'settings'
+                    ? 'bg-gray-100 text-gray-900'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <Settings className="mr-3 h-5 w-5" />
+                Settings
+              </button>
+            </nav>
+          </div>
+        </div>
+      </div>
 
-          <TabsContent value="connection">
-            <ConnectionInfo />
-          </TabsContent>
-        </Tabs>
+      {/* Main content */}
+      <div className="flex flex-col flex-1 overflow-hidden">
+        <main className="flex-1 relative overflow-y-auto focus:outline-none">
+          <div className="py-6">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+              {renderContent()}
+            </div>
+          </div>
+        </main>
       </div>
     </div>
   );
