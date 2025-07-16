@@ -4,13 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChart3, TrendingUp, IndianRupee, Calendar, Download, FileText, Users, Package } from "lucide-react";
+import { BarChart3, TrendingUp, IndianRupee, Calendar, Download, FileText, Users, Package, Sparkles } from "lucide-react";
 
 interface ReportData {
   totalRevenue: number;
   totalInvoices: number;
   totalCustomers: number;
   totalProducts: number;
+  todayRevenue: number;
+  todayInvoices: number;
   monthlyRevenue: { month: string; revenue: number }[];
   topProducts: { name: string; quantity: number; revenue: number }[];
   recentInvoices: any[];
@@ -22,6 +24,8 @@ const Reports: React.FC = () => {
     totalInvoices: 0,
     totalCustomers: 0,
     totalProducts: 0,
+    todayRevenue: 0,
+    todayInvoices: 0,
     monthlyRevenue: [],
     topProducts: [],
     recentInvoices: []
@@ -39,6 +43,12 @@ const Reports: React.FC = () => {
     const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
     const customers = JSON.parse(localStorage.getItem('customers') || '[]');
     const products = JSON.parse(localStorage.getItem('products') || '[]');
+
+    // Calculate today's metrics
+    const todayInvoices = invoices.filter((inv: any) =>
+      new Date(inv.date).toDateString() === new Date().toDateString()
+    );
+    const todayRevenue = todayInvoices.reduce((sum: number, inv: any) => sum + inv.total, 0);
 
     // Filter invoices based on date range
     let filteredInvoices = invoices;
@@ -81,6 +91,8 @@ const Reports: React.FC = () => {
       totalInvoices,
       totalCustomers,
       totalProducts,
+      todayRevenue,
+      todayInvoices: todayInvoices.length,
       monthlyRevenue,
       topProducts,
       recentInvoices
@@ -132,6 +144,8 @@ ${startDate && endDate ? `Custom Range: ${startDate} to ${endDate}` : ''}
 SUMMARY:
 - Total Revenue: ₹${reportData.totalRevenue.toFixed(2)}
 - Total Invoices: ${reportData.totalInvoices}
+- Today's Revenue: ₹${reportData.todayRevenue.toFixed(2)}
+- Today's Invoices: ${reportData.todayInvoices}
 - Total Customers: ${reportData.totalCustomers}
 - Total Products: ${reportData.totalProducts}
 
@@ -164,24 +178,13 @@ ${reportData.recentInvoices.map(invoice =>
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold">Reports</h2>
-          <p className="text-muted-foreground">Analyze your business performance</p>
-        </div>
-        <Button onClick={exportReport}>
-          <Download className="mr-2 h-4 w-4" />
-          Export Report
-        </Button>
-      </div>
-
       <Card>
         <CardHeader>
           <CardTitle>Report Filters</CardTitle>
           <CardDescription>Choose the time period for your report</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <Label htmlFor="dateRange">Quick Select</Label>
               <Select value={dateRange} onValueChange={setDateRange}>
@@ -215,11 +218,30 @@ ${reportData.recentInvoices.map(invoice =>
                 onChange={(e) => setEndDate(e.target.value)}
               />
             </div>
+            <div className="flex items-end">
+              <Button onClick={exportReport} className="w-full">
+                <Download className="mr-2 h-4 w-4" />
+                Export Report
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+        <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium opacity-90">Today's Revenue</CardTitle>
+            <Sparkles className="h-4 w-4 opacity-80" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹{reportData.todayRevenue.toFixed(2)}</div>
+            <p className="text-xs opacity-80">
+              From {reportData.todayInvoices} invoices
+            </p>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, Plus, Eye, Printer, Trash2, IndianRupee, Download, CheckCircle, Clock, AlertCircle, Search, Filter, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { invoiceApiService } from "@/services/invoiceApi";
 
 interface Invoice {
   id: string;
@@ -31,7 +32,6 @@ interface Invoice {
     id: string;
     productName: string;
     colorCode: string;
-    volume: string;
     finalName: string;
     quantity: number;
     rate: number;
@@ -90,7 +90,51 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
     });
   };
 
-  const handlePrint = (invoice: Invoice) => {
+  const updateInvoiceStatus = (id: string, newStatus: Invoice['status']) => {
+    const updatedInvoices = invoices.map(inv => 
+      inv.id === id ? { ...inv, status: newStatus } : inv
+    );
+    localStorage.setItem('invoices', JSON.stringify(updatedInvoices));
+    setInvoices(updatedInvoices);
+  };
+
+  const handlePrint = async (invoice: Invoice) => {
+    try {
+      // Get printer settings
+      const printerSettings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
+      
+      // Use silent printing if enabled
+      if (printerSettings.silentPrinting) {
+        const success = await invoiceApiService.silentPrint(invoice, printerSettings);
+        
+        if (success) {
+          // Auto mark as printed if enabled
+          if (printerSettings.autoMarkAsPrinted && invoice.status === 'draft') {
+            updateInvoiceStatus(invoice.id, 'sent');
+          }
+          
+          toast({
+            title: "Invoice Printed",
+            description: `Invoice ${invoice.invoiceNumber} has been sent to printer successfully.`
+          });
+        } else {
+          // Fallback to regular printing
+          handleRegularPrint(invoice, printerSettings);
+        }
+      } else {
+        handleRegularPrint(invoice, printerSettings);
+      }
+    } catch (error) {
+      console.error('Printing error:', error);
+      toast({
+        title: "Printing Error",
+        description: "An error occurred while printing. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleRegularPrint = (invoice: Invoice, printerSettings: any) => {
     // Create a new window for printing
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -118,6 +162,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
         </head>
         <body>
           <div class="header">
+            ${invoice.storeInfo.logo ? `<img src="${invoice.storeInfo.logo}" alt="Store Logo" style="height: 60px; margin-bottom: 10px;">` : ''}
             <h1>${invoice.storeInfo.name}</h1>
             <p>${invoice.storeInfo.address}</p>
             <p>Phone: ${invoice.storeInfo.phone} | Email: ${invoice.storeInfo.email}</p>
@@ -144,7 +189,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
             <tbody>
               ${invoice.items.map(item => `
                 <tr>
-                  <td>${item.finalName || `${item.productName} - ${item.colorCode} - ${item.volume}`}</td>
+                  <td>${item.finalName || `${item.productName} - ${item.colorCode}`}</td>
                   <td>${item.quantity}</td>
                   <td>₹${item.rate.toFixed(2)}</td>
                   <td>₹${item.total.toFixed(2)}</td>
@@ -172,6 +217,13 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
           
           ${invoice.notes ? `<p><strong>Notes:</strong> ${invoice.notes}</p>` : ''}
           
+          ${invoice.storeInfo.paymentQR ? `
+            <div style="text-align: center; margin-top: 20px;">
+              <p style="font-size: 12px; margin-bottom: 5px;">Scan to Pay</p>
+              <img src="${invoice.storeInfo.paymentQR}" alt="Payment QR" style="height: 60px;">
+            </div>
+          ` : ''}
+          
           <div class="no-print" style="margin-top: 20px;">
             <button onclick="window.print()">Print Invoice</button>
             <button onclick="window.close()">Close</button>
@@ -187,6 +239,12 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
     printWindow.onload = () => {
       printWindow.print();
     };
+
+    // Auto mark as printed if enabled
+    const settings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
+    if (settings.autoMarkAsPrinted && invoice.status === 'draft') {
+      updateInvoiceStatus(invoice.id, 'sent');
+    }
 
     toast({
       title: "Invoice Printed",
@@ -399,7 +457,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
                       {selectedInvoice.items.map((item) => (
                         <tr key={item.id} className="border-t">
                           <td className="p-3">
-                            {item.finalName || `${item.productName} - ${item.colorCode} - ${item.volume}`}
+                            {item.finalName || `${item.productName} - ${item.colorCode}`}
                           </td>
                           <td className="p-3">{item.quantity}</td>
                           <td className="p-3">₹{item.rate.toFixed(2)}</td>

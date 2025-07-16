@@ -1,13 +1,14 @@
+
 import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, Users, FileText, BarChart3, Store, Plus, Wrench, TrendingUp, Sparkles, Smartphone } from "lucide-react";
+import { Package, Users, FileText, BarChart3, Store, Plus, Wrench, TrendingUp, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Products from "@/components/Products";
 import Customers from "@/components/Customers";
 import Invoices from "@/components/Invoices";
 import InvoiceBuilder from "@/components/InvoiceBuilder";
-import Reports from "@/components/Reports";
+import ProtectedReports from "@/components/ProtectedReports";
 import StoreSettings from "@/components/StoreSettings";
 import ConnectionInfo from "@/components/ConnectionInfo";
 
@@ -28,7 +29,7 @@ const Index = () => {
     }
   };
 
-  // Quick stats for dashboard
+  // Quick stats for dashboard (removed today's revenue)
   const getQuickStats = () => {
     const products = JSON.parse(localStorage.getItem('products') || '[]');
     const customers = JSON.parse(localStorage.getItem('customers') || '[]');
@@ -36,13 +37,12 @@ const Index = () => {
     const todayInvoices = invoices.filter((inv: any) =>
       new Date(inv.date).toDateString() === new Date().toDateString()
     );
-    const todayRevenue = todayInvoices.reduce((sum: number, inv: any) => sum + inv.total, 0);
 
     return {
       totalProducts: products.length,
       totalCustomers: customers.length,
       todayInvoices: todayInvoices.length,
-      todayRevenue: todayRevenue
+      totalInvoices: invoices.length
     };
   };
 
@@ -153,13 +153,13 @@ const Index = () => {
               
               <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium opacity-90">Today's Revenue</CardTitle>
-                  <Sparkles className="h-4 w-4 opacity-80" />
+                  <CardTitle className="text-sm font-medium opacity-90">Total Invoices</CardTitle>
+                  <FileText className="h-4 w-4 opacity-80" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">₹{stats.todayRevenue.toFixed(2)}</div>
+                  <div className="text-2xl font-bold">{stats.totalInvoices}</div>
                   <p className="text-xs opacity-80">
-                    Total revenue today
+                    All time invoices
                   </p>
                 </CardContent>
               </Card>
@@ -246,7 +246,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="reports">
-            <Reports />
+            <ProtectedReports />
           </TabsContent>
 
           <TabsContent value="settings">
