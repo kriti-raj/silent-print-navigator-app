@@ -1,0 +1,51 @@
+name: Build Tauri App (Windows)
+
+on:
+  push:
+    branches: [build]
+  pull_request:
+    branches: [build]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install Web Dependencies
+        run: npm install
+
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli
+
+      - name: Build Tauri App (Windows .exe)
+        run: npm run tauri build
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-exe
+          path: src-tauri/target/release/*.exe
+
+      # Optional release step (requires repo permissions)
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: github.ref == 'refs/heads/build'
+        with:
+          name: Release ${{ github.sha }}
+          files: src-tauri/target/release/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
