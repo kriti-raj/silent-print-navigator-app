@@ -37,7 +37,6 @@ interface InvoiceItem {
   quantity: number;
   rate: number;
   total: number;
-  unit: string;
 }
 
 interface SavedInvoice {
@@ -82,8 +81,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     finalName: '',
     quantity: 1,
     rate: 0,
-    total: 0,
-    unit: 'liters'
+    total: 0
   }]);
 
   const [storeInfo] = useState({
@@ -118,8 +116,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       finalName: '',
       quantity: 1,
       rate: 0,
-      total: 0,
-      unit: 'liters'
+      total: 0
     };
     setItems([...items, newItem]);
   };
@@ -173,6 +170,15 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     }
   };
 
+  const generateUPIQR = (amount: number) => {
+    const upiSettings = JSON.parse(localStorage.getItem('upiSettings') || '{}');
+    const upiLink = upiSettings.upiLink || 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=${amount}&cu=INR';
+    const finalLink = upiLink.replace('${amount}', amount.toString());
+    
+    // Generate QR code data URL (you would use a QR library in real implementation)
+    return `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="white"/><text x="50" y="50" text-anchor="middle" fill="black" font-size="8">UPI QR</text></svg>`)}`;
+  };
+
   const handleSaveInvoice = () => {
     const { subtotal, tax, total } = calculateTotals();
     const invoiceNumber = generateInvoiceNumber();
@@ -204,15 +210,6 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       title: "Invoice Created",
       description: `Invoice ${invoiceNumber} has been created successfully.`
     });
-  };
-
-  const generateUPIQR = (amount: number) => {
-    const upiSettings = JSON.parse(localStorage.getItem('upiSettings') || '{}');
-    const upiLink = upiSettings.upiLink || 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=${amount}&cu=INR';
-    const finalLink = upiLink.replace('${amount}', amount.toString());
-    
-    // Generate QR code data URL (you would use a QR library in real implementation)
-    return `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="white"/><text x="50" y="50" text-anchor="middle" fill="black" font-size="8">UPI QR</text></svg>`)}`;
   };
 
   const handlePrint = () => {
