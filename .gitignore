@@ -7,6 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Build output
 node_modules
 dist
 dist-ssr
@@ -22,3 +23,37 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Tauri build output and native binaries
+/src-tauri/target/
+src-tauri/target/
+src-tauri/Cargo.lock
+/src-tauri/Cargo.lock
+src-tauri/.tauri-build
+/src-tauri/.tauri-build
+*.exe
+*.dll
+*.app
+*.dmg
+*.deb
+*.rpm
+*.msi
+*.snap
+*.iml
+
+# Tauri config files (if you want to ignore generated ones)
+/src-tauri/tauri.conf.json
+
+# Rust artifacts
+Cargo.lock
+Cargo.toml
+target/
+*.rs.bk
+
+# Misc
+*.bak
+*.tmp
+
+# OS-specific files
+Thumbs.db
+ehthumbs.db
