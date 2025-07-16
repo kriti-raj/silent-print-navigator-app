@@ -1,8 +1,7 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BarChart3, Users, Package, FileText, Settings, Smartphone, Reports, Plus, TrendingUp, IndianRupee } from "lucide-react";
+import { BarChart3, Users, Package, FileText, Settings, Smartphone, Plus, TrendingUp, IndianRupee } from "lucide-react";
 import Products from '../components/Products';
 import Customers from '../components/Customers';
 import Invoices from '../components/Invoices';
