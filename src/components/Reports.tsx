@@ -94,7 +94,7 @@ const Reports: React.FC = () => {
 
     // Calculate basic metrics
     const totalRevenue = filteredInvoices.reduce((sum: number, inv: any) => sum + inv.total, 0);
-    const totalInvoices = filteredInvoices.length;
+    const totalInvoices = invoices.length; // Use all invoices for total count
     const totalCustomers = customers.length;
     const totalProducts = products.length;
 
@@ -134,7 +134,7 @@ const Reports: React.FC = () => {
     return Object.entries(monthlyData)
       .map(([month, revenue]) => ({ month, revenue }))
       .sort((a, b) => a.month.localeCompare(b.month))
-      .slice(-6); // Last 6 months
+      .slice(-6);
   };
 
   const getTopProducts = (invoices: any[]) => {
@@ -154,7 +154,7 @@ const Reports: React.FC = () => {
     return Object.entries(productData)
       .map(([name, data]) => ({ name, ...data }))
       .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5); // Top 5 products
+      .slice(0, 5);
   };
 
   const exportReport = () => {

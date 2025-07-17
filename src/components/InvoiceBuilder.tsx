@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -144,6 +145,13 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     }));
   };
 
+  const getFilteredProducts = (searchTerm: string) => {
+    if (!searchTerm) return products;
+    return products.filter(product => 
+      product.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  };
+
   const calculateTotals = () => {
     const subtotal = items.reduce((sum, item) => sum + item.total, 0);
     const tax = gstEnabled ? subtotal * 0.18 : 0;
@@ -154,25 +162,25 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   const generateInvoiceNumber = () => {
     const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
     const today = new Date();
-    const ddmmyy = today.toLocaleDateString('en-GB').split('/').map(part => part.padStart(2, '0')).join('').slice(0, 6);
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const yy = String(today.getFullYear()).slice(-2);
     const invoiceCount = invoices.length + 1;
-    return `${ddmmyy}${String(invoiceCount).padStart(3, '0')}`;
+    return `${dd}${mm}${yy}${String(invoiceCount).padStart(3, '0')}`;
   };
 
   const generateUPIQR = (amount: number) => {
-    const storeInfo = JSON.parse(localStorage.getItem('storeInfo') || '{}');
+    const storeSettings = JSON.parse(localStorage.getItem('storeInfo') || '{}');
     
-    // Check if we should use uploaded QR or generate UPI QR
-    if (storeInfo.useUploadedQR && storeInfo.paymentQR) {
-      return storeInfo.paymentQR;
+    if (storeSettings.useUploadedQR && storeSettings.paymentQR) {
+      return storeSettings.paymentQR;
     }
     
-    // Generate UPI QR
     const upiSettings = JSON.parse(localStorage.getItem('upiSettings') || '{}');
     const upiString = upiSettings.upiString || 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=${amount}&cu=INR';
     const finalUpiString = upiString.replace('${amount}', amount.toString());
     
-    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(finalUpiString)}`;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(finalUpiString)}`;
   };
 
   const handleCustomerSelect = (customerId: string) => {
@@ -220,22 +228,11 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     });
   };
 
-  const handlePrint = () => {
+  const handleSilentPrint = () => {
     if (!createdInvoice) return;
 
     const { total } = calculateTotals();
     const upiQRUrl = generateUPIQR(total);
-
-    // Enhanced printing with better formatting
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast({
-        title: "Print Blocked",
-        description: "Please allow popups to enable printing.",
-        variant: "destructive"
-      });
-      return;
-    }
 
     const printerSettings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
     const paperSize = printerSettings.paperSize || 'A4';
@@ -247,9 +244,10 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
         <head>
           <title>Invoice ${createdInvoice.invoiceNumber}</title>
           <style>
+            @media print { @page { margin: ${margins}mm; } }
             body { 
               font-family: Arial, sans-serif; 
-              margin: ${margins}mm; 
+              margin: 0; 
               padding: 0;
               font-size: ${paperSize === 'A5' ? '12px' : '14px'};
             }
@@ -261,11 +259,8 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
             .totals { margin-left: auto; width: 300px; }
             .total-row { display: flex; justify-content: space-between; margin: 5px 0; padding: 3px 0; }
             .final-total { font-weight: bold; font-size: 1.2em; border-top: 2px solid #333; padding-top: 10px; }
-            .qr-section { text-align: center; margin-top: 20px; page-break-inside: avoid; }
-            @media print {
-              body { margin: 0; }
-              .no-print { display: none; }
-            }
+            .qr-section { text-align: center; margin-top: 15px; }
+            .qr-section img { width: 100px; height: 100px; }
           </style>
         </head>
         <body>
@@ -294,10 +289,10 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
           <table class="items-table">
             <thead>
               <tr>
-                <th style="width: 50%;">Item</th>
-                <th style="width: 15%;">Qty</th>
-                <th style="width: 20%;">Rate</th>
-                <th style="width: 15%;">Total</th>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Rate</th>
+                <th>Total</th>
               </tr>
             </thead>
             <tbody>
@@ -329,32 +324,43 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
             </div>
           </div>
           
-          ${createdInvoice.notes ? `<div style="margin-top: 20px;"><strong>Notes:</strong> ${createdInvoice.notes}</div>` : ''}
+          ${createdInvoice.notes ? `<div style="margin-top: 15px;"><strong>Notes:</strong> ${createdInvoice.notes}</div>` : ''}
           
           <div class="qr-section">
-            <h3>Payment QR Code</h3>
-            <img src="${upiQRUrl}" alt="Payment QR Code" style="width: 150px; height: 150px;" />
-            <p style="font-size: 12px; margin-top: 10px;">Scan to pay ₹${createdInvoice.total.toFixed(2)}</p>
+            <p style="margin: 5px 0; font-size: 12px;"><strong>Payment QR</strong></p>
+            <img src="${upiQRUrl}" alt="Payment QR" />
           </div>
-          
-          <script>
-            window.onload = function() {
-              setTimeout(() => {
-                window.print();
-                setTimeout(() => window.close(), 1000);
-              }, 500);
-            }
-          </script>
         </body>
       </html>
     `;
 
-    printWindow.document.write(printContent);
-    printWindow.document.close();
+    // Create iframe for silent printing
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.top = '-9999px';
+    iframe.style.left = '-9999px';
+    iframe.style.width = '1px';
+    iframe.style.height = '1px';
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentWindow?.document;
+    if (iframeDoc) {
+      iframeDoc.open();
+      iframeDoc.write(printContent);
+      iframeDoc.close();
+
+      // Wait for content to load then print silently
+      setTimeout(() => {
+        iframe.contentWindow?.print();
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+        }, 1000);
+      }, 500);
+    }
 
     toast({
       title: "Invoice Sent to Printer",
-      description: `Invoice ${createdInvoice.invoiceNumber} has been sent to printer.`
+      description: `Invoice ${createdInvoice.invoiceNumber} has been sent to printer silently.`
     });
   };
 
@@ -371,7 +377,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
               Back to Invoices
             </Button>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={handlePrint}>
+              <Button variant="outline" onClick={handleSilentPrint}>
                 <Printer className="mr-2 h-4 w-4" />
                 Print Invoice
               </Button>
@@ -433,29 +439,33 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                   </div>
                 </div>
 
-                <div className="flex justify-end">
-                  <div className="w-64 space-y-2">
-                    <div className="flex justify-between">
-                      <span>Subtotal:</span>
-                      <span>₹{subtotal.toFixed(2)}</span>
-                    </div>
-                    {gstEnabled && (
-                      <div className="flex justify-between">
-                        <span>GST (18%):</span>
-                        <span>₹{tax.toFixed(2)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between font-bold text-lg border-t pt-2">
-                      <span>Total:</span>
-                      <span>₹{total.toFixed(2)}</span>
+                <div className="grid grid-cols-2 gap-6 items-start">
+                  <div className="flex justify-start">
+                    <div className="text-center">
+                      <h3 className="text-lg font-medium mb-2">Payment QR</h3>
+                      <img src={upiQRUrl} alt="Payment QR Code" className="w-32 h-32 mx-auto border" />
+                      <p className="mt-2 text-sm text-muted-foreground">Scan to pay ₹{total.toFixed(2)}</p>
                     </div>
                   </div>
-                </div>
-
-                <div className="text-center">
-                  <h3 className="text-lg font-medium mb-4">Pay via UPI</h3>
-                  <img src={upiQRUrl} alt="UPI QR Code" className="mx-auto w-48 h-48" />
-                  <p className="mt-2 text-sm text-muted-foreground">Scan to pay ₹{total.toFixed(2)}</p>
+                  
+                  <div className="flex justify-end">
+                    <div className="w-64 space-y-2">
+                      <div className="flex justify-between">
+                        <span>Subtotal:</span>
+                        <span>₹{subtotal.toFixed(2)}</span>
+                      </div>
+                      {gstEnabled && (
+                        <div className="flex justify-between">
+                          <span>GST (18%):</span>
+                          <span>₹{tax.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-bold text-lg border-t pt-2">
+                        <span>Total:</span>
+                        <span>₹{total.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {notes && (
@@ -597,20 +607,17 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
                     <Label>Product</Label>
-                    <div className="relative">
-                      <Input
-                        list={`products-${item.id}`}
-                        value={item.productName}
-                        onChange={(e) => updateItem(item.id, 'productName', e.target.value)}
-                        placeholder="Type or select product"
-                        className="w-full"
-                      />
-                      <datalist id={`products-${item.id}`}>
-                        {products.map((product) => (
-                          <option key={product.id} value={product.name} />
-                        ))}
-                      </datalist>
-                    </div>
+                    <Input
+                      value={item.productName}
+                      onChange={(e) => updateItem(item.id, 'productName', e.target.value)}
+                      placeholder="Type product name"
+                      list={`products-${item.id}`}
+                    />
+                    <datalist id={`products-${item.id}`}>
+                      {getFilteredProducts(item.productName).map((product) => (
+                        <option key={product.id} value={product.name} />
+                      ))}
+                    </datalist>
                   </div>
                   
                   <div>

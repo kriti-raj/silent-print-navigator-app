@@ -1,222 +1,68 @@
 
-import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, Users, FileText, BarChart3, Store, Plus, TrendingUp, Smartphone } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import Products from "@/components/Products";
-import Customers from "@/components/Customers";
-import Invoices from "@/components/Invoices";
-import InvoiceBuilder from "@/components/InvoiceBuilder";
-import ProtectedReports from "@/components/ProtectedReports";
-import StoreSettings from "@/components/StoreSettings";
+import Products from "../components/Products";
+import Customers from "../components/Customers";
+import Invoices from "../components/Invoices";
+import InvoiceBuilder from "../components/InvoiceBuilder";
+import Reports from "../components/Reports";
+import StoreSettings from "../components/StoreSettings";
+import { useState } from "react";
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState("dashboard");
-  const [showInvoiceBuilder, setShowInvoiceBuilder] = useState(false);
-  const [highlightInvoiceId, setHighlightInvoiceId] = useState<string | undefined>();
+  const [activeView, setActiveView] = useState<'dashboard' | 'invoice'>('dashboard');
+  const [newInvoiceId, setNewInvoiceId] = useState<string | undefined>();
 
   const handleCreateInvoice = () => {
-    setShowInvoiceBuilder(true);
+    setActiveView('invoice');
   };
 
-  const handleCloseInvoiceBuilder = (newInvoiceId?: string) => {
-    setShowInvoiceBuilder(false);
-    if (newInvoiceId) {
-      setHighlightInvoiceId(newInvoiceId);
-      setActiveTab("invoices");
+  const handleInvoiceClose = (invoiceId?: string) => {
+    setActiveView('dashboard');
+    if (invoiceId) {
+      setNewInvoiceId(invoiceId);
     }
   };
 
-  // Quick stats for dashboard
-  const getQuickStats = () => {
-    const products = JSON.parse(localStorage.getItem('products') || '[]');
-    const customers = JSON.parse(localStorage.getItem('customers') || '[]');
-    const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
-    const todayInvoices = invoices.filter((inv: any) =>
-      new Date(inv.date).toDateString() === new Date().toDateString()
-    );
-
-    return {
-      totalProducts: products.length,
-      totalCustomers: customers.length,
-      todayInvoices: todayInvoices.length,
-      totalInvoices: invoices.length
-    };
-  };
-
-  if (showInvoiceBuilder) {
-    return <InvoiceBuilder onClose={handleCloseInvoiceBuilder} />;
+  if (activeView === 'invoice') {
+    return <InvoiceBuilder onClose={handleInvoiceClose} />;
   }
-
-  const stats = getQuickStats();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="container mx-auto p-6">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-primary mb-2">Billing Buddy</h1>
-            <p className="text-lg text-muted-foreground">Complete Billing & Inventory Management System</p>
-          </div>
-          <div className="flex gap-3">
-            <Button 
-              onClick={handleCreateInvoice}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Create Invoice
-            </Button>
-            <Button 
-              variant="outline"
-              onClick={() => window.open('/mobile', '_blank')}
-            >
-              <Smartphone className="mr-2 h-4 w-4" />
-              Mobile View
-            </Button>
+            <h1 className="text-4xl font-bold text-gray-800 mb-2">Billing Buddy</h1>
+            <p className="text-gray-600">Your complete invoice management solution</p>
           </div>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 lg:w-fit lg:grid-cols-6">
-            <TabsTrigger value="dashboard" className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" />
-              Dashboard
-            </TabsTrigger>
-            <TabsTrigger value="products" className="flex items-center gap-2">
-              <Package className="h-4 w-4" />
-              Products
-            </TabsTrigger>
-            <TabsTrigger value="customers" className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Customers
-            </TabsTrigger>
-            <TabsTrigger value="invoices" className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Invoices
-            </TabsTrigger>
-            <TabsTrigger value="reports" className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Reports
-            </TabsTrigger>
-            <TabsTrigger value="settings" className="flex items-center gap-2">
-              <Store className="h-4 w-4" />
-              Store
-            </TabsTrigger>
+        <Tabs defaultValue="invoices" className="w-full">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="invoices">Invoices</TabsTrigger>
+            <TabsTrigger value="products">Products</TabsTrigger>
+            <TabsTrigger value="customers">Customers</TabsTrigger>
+            <TabsTrigger value="reports">Reports</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="dashboard" className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-              <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium opacity-90">Total Products</CardTitle>
-                  <Package className="h-4 w-4 opacity-80" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.totalProducts}</div>
-                  <p className="text-xs opacity-80">
-                    Active inventory items
-                  </p>
-                </CardContent>
-              </Card>
-              
-              <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium opacity-90">Total Customers</CardTitle>
-                  <Users className="h-4 w-4 opacity-80" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.totalCustomers}</div>
-                  <p className="text-xs opacity-80">
-                    Registered customers
-                  </p>
-                </CardContent>
-              </Card>
-              
-              <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium opacity-90">Today's Invoices</CardTitle>
-                  <FileText className="h-4 w-4 opacity-80" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.todayInvoices}</div>
-                  <p className="text-xs opacity-80">
-                    Invoices created today
-                  </p>
-                </CardContent>
-              </Card>
-              
-              <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium opacity-90">Total Invoices</CardTitle>
-                  <FileText className="h-4 w-4 opacity-80" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.totalInvoices}</div>
-                  <p className="text-xs opacity-80">
-                    All time invoices
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Quick Actions
-                </CardTitle>
-                <CardDescription>Frequently used actions</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Button 
-                  onClick={handleCreateInvoice}
-                  className="w-full justify-start"
-                  variant="outline"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create New Invoice
-                </Button>
-                <Button 
-                  onClick={() => setActiveTab("products")}
-                  className="w-full justify-start"
-                  variant="outline"
-                >
-                  <Package className="mr-2 h-4 w-4" />
-                  Manage Products
-                </Button>
-                <Button 
-                  onClick={() => setActiveTab("customers")}
-                  className="w-full justify-start"
-                  variant="outline"
-                >
-                  <Users className="mr-2 h-4 w-4" />
-                  Manage Customers
-                </Button>
-              </CardContent>
-            </Card>
+          <TabsContent value="invoices" className="space-y-6">
+            <Invoices onCreateInvoice={handleCreateInvoice} newInvoiceId={newInvoiceId} />
           </TabsContent>
 
-          <TabsContent value="products">
+          <TabsContent value="products" className="space-y-6">
             <Products />
           </TabsContent>
 
-          <TabsContent value="customers">
+          <TabsContent value="customers" className="space-y-6">
             <Customers />
           </TabsContent>
 
-          <TabsContent value="invoices">
-            <Invoices 
-              onCreateNew={handleCreateInvoice}
-              highlightInvoiceId={highlightInvoiceId}
-            />
+          <TabsContent value="reports" className="space-y-6">
+            <Reports />
           </TabsContent>
 
-          <TabsContent value="reports">
-            <ProtectedReports />
-          </TabsContent>
-
-          <TabsContent value="settings">
+          <TabsContent value="settings" className="space-y-6">
             <StoreSettings />
           </TabsContent>
         </Tabs>
