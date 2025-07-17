@@ -37,14 +37,37 @@ const Index = () => {
           </div>
         </div>
 
-        <Tabs defaultValue="invoices" className="w-full">
+        <Tabs defaultValue="dashboard" className="w-full">
           <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="invoices">Invoices</TabsTrigger>
             <TabsTrigger value="products">Products</TabsTrigger>
             <TabsTrigger value="customers">Customers</TabsTrigger>
             <TabsTrigger value="reports">Reports</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="dashboard" className="space-y-6">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-medium mb-2">Quick Actions</h3>
+                <button 
+                  onClick={handleCreateInvoice}
+                  className="w-full bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+                >
+                  Create New Invoice
+                </button>
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-medium mb-2">Recent Activity</h3>
+                <p className="text-gray-600">View your recent invoices and transactions</p>
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-medium mb-2">Business Overview</h3>
+                <p className="text-gray-600">Monitor your business performance</p>
+              </div>
+            </div>
+          </TabsContent>
 
           <TabsContent value="invoices" className="space-y-6">
             <Invoices onCreateNew={handleCreateInvoice} highlightInvoiceId={newInvoiceId} />
