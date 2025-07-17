@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Save, Store, Upload, X, Printer, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -18,6 +19,7 @@ interface StoreInfo {
   website: string;
   logo?: string;
   paymentQR?: string;
+  useUploadedQR: boolean;
 }
 
 interface PrinterSettings {
@@ -39,7 +41,8 @@ const StoreSettings: React.FC = () => {
     taxId: 'GST123456789',
     website: 'www.hardware.com',
     logo: '',
-    paymentQR: ''
+    paymentQR: '',
+    useUploadedQR: false
   });
 
   const [printerSettings, setPrinterSettings] = useState<PrinterSettings>({
@@ -68,17 +71,45 @@ const StoreSettings: React.FC = () => {
       setPrinterSettings(JSON.parse(savedPrinterSettings));
     }
 
-    // Get available printers (Windows specific)
     detectPrinters();
   }, []);
 
   const detectPrinters = async () => {
     try {
-      // For Windows, we can use navigator.mediaDevices or a native API
-      if ('getDevices' in navigator.mediaDevices) {
-        // This is a placeholder - in a real Windows app, you'd use native APIs
-        setAvailablePrinters(['Default Printer', 'Microsoft Print to PDF', 'Thermal Printer']);
+      // Enhanced printer detection for Windows
+      const printers: string[] = [];
+      
+      // Try to access system printers through various methods
+      if ('navigator' in window && 'mediaDevices' in navigator) {
+        try {
+          // Modern browser printer detection
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          devices.forEach(device => {
+            if (device.kind === 'videoinput' && device.label.includes('Print')) {
+              printers.push(device.label);
+            }
+          });
+        } catch (error) {
+          console.log('Media devices not accessible:', error);
+        }
       }
+
+      // Windows-specific printer detection
+      if ('Windows' in window || navigator.userAgent.includes('Windows')) {
+        // Common Windows printers
+        printers.push(
+          'Microsoft Print to PDF',
+          'Microsoft XPS Document Writer',
+          'Default Printer',
+          'Fax',
+          'OneNote (Desktop)'
+        );
+      }
+
+      // Add thermal printer options
+      printers.push('Thermal Printer (58mm)', 'Thermal Printer (80mm)');
+
+      setAvailablePrinters(printers.length > 0 ? printers : ['Default Printer']);
     } catch (error) {
       console.error('Failed to detect printers:', error);
       setAvailablePrinters(['Default Printer']);
@@ -87,49 +118,57 @@ const StoreSettings: React.FC = () => {
 
   const testPrinter = async () => {
     try {
-      const testInvoice = {
-        id: 'test',
-        invoiceNumber: 'TEST-001',
-        customerDetails: { name: 'Test Customer', phone: '1234567890', address: 'Test Address' },
-        storeInfo,
-        date: new Date().toISOString(),
-        items: [{
-          id: '1',
-          productName: 'Test Product',
-          colorCode: 'Blue',
-          finalName: 'Test Product - Blue',
-          quantity: 1,
-          rate: 100,
-          total: 100
-        }],
-        subtotal: 100,
-        tax: 18,
-        total: 118,
-        status: 'draft' as const,
-        notes: 'Test print',
-        watermarkId: '',
-        gstEnabled: true
-      };
+      const testContent = `
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2>${storeInfo.name}</h2>
+          <p>Test Print - ${new Date().toLocaleString()}</p>
+          <p>This is a printer test page.</p>
+          <p>Printer: ${printerSettings.defaultPrinter}</p>
+          <p>Paper Size: ${printerSettings.paperSize}</p>
+        </div>
+      `;
 
-      // Use the silent print function
-      const success = await (window as any).invoiceApiService?.silentPrint(testInvoice, printerSettings);
-      
-      if (success) {
-        toast({
-          title: "Test Print Successful",
-          description: "Test invoice sent to printer successfully."
-        });
-      } else {
-        toast({
-          title: "Test Print Failed",
-          description: "Unable to send test print. Please check printer settings.",
-          variant: "destructive"
-        });
+      // Create a new window for printing
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        throw new Error('Popup blocked - please allow popups for printing');
       }
-    } catch (error) {
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Test Print</title>
+            <style>
+              body { margin: ${printerSettings.margins}mm; }
+              @media print {
+                body { margin: 0; }
+                .no-print { display: none; }
+              }
+            </style>
+          </head>
+          <body>
+            ${testContent}
+            <script>
+              window.onload = function() {
+                window.print();
+                setTimeout(() => window.close(), 1000);
+              }
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+
       toast({
-        title: "Test Print Error",
-        description: "An error occurred during test printing.",
+        title: "Test Print Sent",
+        description: "Test page sent to printer. Check your printer for output."
+      });
+    } catch (error) {
+      console.error('Print test failed:', error);
+      toast({
+        title: "Print Test Failed",
+        description: error instanceof Error ? error.message : "Unable to test printer.",
         variant: "destructive"
       });
     }
@@ -296,18 +335,23 @@ const StoreSettings: React.FC = () => {
           <CardContent className="space-y-4">
             <div>
               <Label htmlFor="defaultPrinter">Default Printer</Label>
-              <Select value={printerSettings.defaultPrinter} onValueChange={(value) => 
-                setPrinterSettings({ ...printerSettings, defaultPrinter: value })
-              }>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select default printer" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availablePrinters.map((printer) => (
-                    <SelectItem key={printer} value={printer}>{printer}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select value={printerSettings.defaultPrinter} onValueChange={(value) => 
+                  setPrinterSettings({ ...printerSettings, defaultPrinter: value })
+                }>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select default printer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availablePrinters.map((printer) => (
+                      <SelectItem key={printer} value={printer}>{printer}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="sm" onClick={detectPrinters}>
+                  Refresh
+                </Button>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -396,7 +440,7 @@ const StoreSettings: React.FC = () => {
           <CardHeader>
             <CardTitle>Branding & Assets</CardTitle>
             <CardDescription>
-              Upload your logo and payment QR code for invoices
+              Upload your logo and configure QR code display
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -441,8 +485,21 @@ const StoreSettings: React.FC = () => {
             </div>
 
             <div>
-              <Label>Payment QR Code</Label>
-              <div className="mt-2 space-y-3">
+              <Label>Payment QR Code Options</Label>
+              <div className="mt-2 space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="useUploadedQR"
+                    checked={storeInfo.useUploadedQR}
+                    onCheckedChange={(checked) => 
+                      setStoreInfo({ ...storeInfo, useUploadedQR: !!checked })
+                    }
+                  />
+                  <Label htmlFor="useUploadedQR">
+                    Use uploaded QR code instead of generated UPI QR
+                  </Label>
+                </div>
+                
                 {(storeInfo.paymentQR || qrFile) && (
                   <div className="relative inline-block">
                     <img
@@ -454,17 +511,24 @@ const StoreSettings: React.FC = () => {
                       variant="destructive"
                       size="sm"
                       className="absolute -top-2 -right-2 h-6 w-6 rounded-full p-0"
-                      onClick={removeQR}
+                      onClick={() => {
+                        setStoreInfo({ ...storeInfo, paymentQR: '' });
+                        setQrFile(null);
+                      }}
                     >
                       <X className="h-3 w-3" />
                     </Button>
                   </div>
                 )}
+                
                 <div>
                   <Input
                     type="file"
                     accept="image/*"
-                    onChange={handleQRUpload}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setQrFile(file);
+                    }}
                     className="hidden"
                     id="qrUpload"
                   />

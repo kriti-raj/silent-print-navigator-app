@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -161,11 +160,18 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   };
 
   const generateUPIQR = (amount: number) => {
+    const storeInfo = JSON.parse(localStorage.getItem('storeInfo') || '{}');
+    
+    // Check if we should use uploaded QR or generate UPI QR
+    if (storeInfo.useUploadedQR && storeInfo.paymentQR) {
+      return storeInfo.paymentQR;
+    }
+    
+    // Generate UPI QR
     const upiSettings = JSON.parse(localStorage.getItem('upiSettings') || '{}');
     const upiString = upiSettings.upiString || 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=${amount}&cu=INR';
     const finalUpiString = upiString.replace('${amount}', amount.toString());
     
-    // Create QR code using a simple QR generator service
     return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(finalUpiString)}`;
   };
 
@@ -220,8 +226,20 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     const { total } = calculateTotals();
     const upiQRUrl = generateUPIQR(total);
 
+    // Enhanced printing with better formatting
     const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+    if (!printWindow) {
+      toast({
+        title: "Print Blocked",
+        description: "Please allow popups to enable printing.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const printerSettings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
+    const paperSize = printerSettings.paperSize || 'A4';
+    const margins = printerSettings.margins || 10;
 
     const printContent = `
       <!DOCTYPE html>
@@ -229,16 +247,21 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
         <head>
           <title>Invoice ${createdInvoice.invoiceNumber}</title>
           <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            .header { text-align: center; margin-bottom: 20px; }
+            body { 
+              font-family: Arial, sans-serif; 
+              margin: ${margins}mm; 
+              padding: 0;
+              font-size: ${paperSize === 'A5' ? '12px' : '14px'};
+            }
+            .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
             .invoice-details { margin-bottom: 20px; }
             .items-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
             .items-table th, .items-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            .items-table th { background-color: #f2f2f2; }
+            .items-table th { background-color: #f2f2f2; font-weight: bold; }
             .totals { margin-left: auto; width: 300px; }
-            .total-row { display: flex; justify-content: space-between; margin: 5px 0; }
+            .total-row { display: flex; justify-content: space-between; margin: 5px 0; padding: 3px 0; }
             .final-total { font-weight: bold; font-size: 1.2em; border-top: 2px solid #333; padding-top: 10px; }
-            .qr-section { text-align: center; margin-top: 20px; }
+            .qr-section { text-align: center; margin-top: 20px; page-break-inside: avoid; }
             @media print {
               body { margin: 0; }
               .no-print { display: none; }
@@ -247,6 +270,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
         </head>
         <body>
           <div class="header">
+            ${createdInvoice.storeInfo.logo ? `<img src="${createdInvoice.storeInfo.logo}" alt="Store Logo" style="height: 40px; margin-bottom: 10px;">` : ''}
             <h1>${createdInvoice.storeInfo.name}</h1>
             <p>${createdInvoice.storeInfo.address}</p>
             <p>Phone: ${createdInvoice.storeInfo.phone} | Email: ${createdInvoice.storeInfo.email}</p>
@@ -254,26 +278,32 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
           </div>
           
           <div class="invoice-details">
-            <h2>Invoice #${createdInvoice.invoiceNumber}</h2>
-            <p><strong>Date:</strong> ${new Date(createdInvoice.date).toLocaleDateString()}</p>
-            <p><strong>Customer:</strong> ${createdInvoice.customerDetails.name}</p>
-            <p><strong>Phone:</strong> ${createdInvoice.customerDetails.phone}</p>
-            <p><strong>Address:</strong> ${createdInvoice.customerDetails.address}</p>
+            <div style="display: flex; justify-content: space-between;">
+              <div>
+                <h2>Invoice #${createdInvoice.invoiceNumber}</h2>
+                <p><strong>Date:</strong> ${new Date(createdInvoice.date).toLocaleDateString()}</p>
+              </div>
+              <div style="text-align: right;">
+                <p><strong>Customer:</strong> ${createdInvoice.customerDetails.name}</p>
+                <p><strong>Phone:</strong> ${createdInvoice.customerDetails.phone}</p>
+                <p><strong>Address:</strong> ${createdInvoice.customerDetails.address}</p>
+              </div>
+            </div>
           </div>
           
           <table class="items-table">
             <thead>
               <tr>
-                <th>Item</th>
-                <th>Quantity</th>
-                <th>Rate</th>
-                <th>Total</th>
+                <th style="width: 50%;">Item</th>
+                <th style="width: 15%;">Qty</th>
+                <th style="width: 20%;">Rate</th>
+                <th style="width: 15%;">Total</th>
               </tr>
             </thead>
             <tbody>
               ${createdInvoice.items.map(item => `
                 <tr>
-                  <td>${item.finalName || `${item.productName} - ${item.colorCode} - ${item.volume}`}</td>
+                  <td>${item.finalName || `${item.productName}${item.colorCode ? ` - ${item.colorCode}` : ''}${item.volume ? ` - ${item.volume}` : ''}`}</td>
                   <td>${item.quantity}</td>
                   <td>₹${item.rate.toFixed(2)}</td>
                   <td>₹${item.total.toFixed(2)}</td>
@@ -299,27 +329,31 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
             </div>
           </div>
           
+          ${createdInvoice.notes ? `<div style="margin-top: 20px;"><strong>Notes:</strong> ${createdInvoice.notes}</div>` : ''}
+          
           <div class="qr-section">
-            <h3>Pay via UPI</h3>
-            <img src="${upiQRUrl}" alt="UPI QR Code" style="width: 200px; height: 200px;" />
-            <p>Scan to pay ₹${createdInvoice.total.toFixed(2)}</p>
+            <h3>Payment QR Code</h3>
+            <img src="${upiQRUrl}" alt="Payment QR Code" style="width: 150px; height: 150px;" />
+            <p style="font-size: 12px; margin-top: 10px;">Scan to pay ₹${createdInvoice.total.toFixed(2)}</p>
           </div>
           
-          ${createdInvoice.notes ? `<p><strong>Notes:</strong> ${createdInvoice.notes}</p>` : ''}
+          <script>
+            window.onload = function() {
+              setTimeout(() => {
+                window.print();
+                setTimeout(() => window.close(), 1000);
+              }, 500);
+            }
+          </script>
         </body>
       </html>
     `;
 
     printWindow.document.write(printContent);
     printWindow.document.close();
-    
-    printWindow.onload = () => {
-      printWindow.print();
-      printWindow.close();
-    };
 
     toast({
-      title: "Invoice Printed",
+      title: "Invoice Sent to Printer",
       description: `Invoice ${createdInvoice.invoiceNumber} has been sent to printer.`
     });
   };
@@ -563,21 +597,20 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
                     <Label>Product</Label>
-                    <Select
-                      value={item.productName}
-                      onValueChange={(value) => updateItem(item.id, 'productName', value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select product" />
-                      </SelectTrigger>
-                      <SelectContent>
+                    <div className="relative">
+                      <Input
+                        list={`products-${item.id}`}
+                        value={item.productName}
+                        onChange={(e) => updateItem(item.id, 'productName', e.target.value)}
+                        placeholder="Type or select product"
+                        className="w-full"
+                      />
+                      <datalist id={`products-${item.id}`}>
                         {products.map((product) => (
-                          <SelectItem key={product.id} value={product.name}>
-                            {product.name}
-                          </SelectItem>
+                          <option key={product.id} value={product.name} />
                         ))}
-                      </SelectContent>
-                    </Select>
+                      </datalist>
+                    </div>
                   </div>
                   
                   <div>

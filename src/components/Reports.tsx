@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -252,7 +251,7 @@ ${reportData.recentInvoices.map(invoice =>
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium opacity-90">Today's Revenue</CardTitle>
@@ -266,6 +265,19 @@ ${reportData.recentInvoices.map(invoice =>
           </CardContent>
         </Card>
 
+        <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium opacity-90">Today's Invoices</CardTitle>
+            <FileText className="h-4 w-4 opacity-80" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{reportData.todayInvoices}</div>
+            <p className="text-xs opacity-80">
+              Invoices today
+            </p>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
@@ -274,7 +286,7 @@ ${reportData.recentInvoices.map(invoice =>
           <CardContent>
             <div className="text-2xl font-bold">₹{reportData.totalRevenue.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">
-              From {reportData.totalInvoices} invoices
+              All time revenue
             </p>
           </CardContent>
         </Card>
@@ -287,11 +299,13 @@ ${reportData.recentInvoices.map(invoice =>
           <CardContent>
             <div className="text-2xl font-bold">{reportData.totalInvoices}</div>
             <p className="text-xs text-muted-foreground">
-              Invoices generated
+              All invoices generated
             </p>
           </CardContent>
         </Card>
+      </div>
 
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
