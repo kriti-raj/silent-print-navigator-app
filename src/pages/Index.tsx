@@ -47,7 +47,7 @@ const Index = () => {
           </TabsList>
 
           <TabsContent value="invoices" className="space-y-6">
-            <Invoices onCreateInvoice={handleCreateInvoice} newInvoiceId={newInvoiceId} />
+            <Invoices onCreateNew={handleCreateInvoice} highlightInvoiceId={newInvoiceId} />
           </TabsContent>
 
           <TabsContent value="products" className="space-y-6">
