@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,14 @@ interface Product {
   predefinedColors?: string[];
   volumes?: string[];
   unit: 'liters' | 'kg' | 'pieces';
+}
+
+interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  address: string;
+  email?: string;
 }
 
 interface InvoiceItem {
@@ -53,6 +62,7 @@ interface InvoiceBuilderProps {
 
 const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [gstEnabled, setGstEnabled] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'edit' | 'view'>('edit');
   const [createdInvoice, setCreatedInvoice] = useState<SavedInvoice | null>(null);
@@ -93,6 +103,11 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     const savedProducts = localStorage.getItem('products');
     if (savedProducts) {
       setProducts(JSON.parse(savedProducts));
+    }
+
+    const savedCustomers = localStorage.getItem('customers');
+    if (savedCustomers) {
+      setCustomers(JSON.parse(savedCustomers));
     }
   }, []);
 
@@ -139,7 +154,31 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
 
   const generateInvoiceNumber = () => {
     const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
-    return `INV-${String(invoices.length + 1).padStart(4, '0')}`;
+    const today = new Date();
+    const ddmmyy = today.toLocaleDateString('en-GB').split('/').map(part => part.padStart(2, '0')).join('').slice(0, 6);
+    const invoiceCount = invoices.length + 1;
+    return `${ddmmyy}${String(invoiceCount).padStart(3, '0')}`;
+  };
+
+  const generateUPIQR = (amount: number) => {
+    const upiSettings = JSON.parse(localStorage.getItem('upiSettings') || '{}');
+    const upiString = upiSettings.upiString || 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=${amount}&cu=INR';
+    const finalUpiString = upiString.replace('${amount}', amount.toString());
+    
+    // Create QR code using a simple QR generator service
+    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(finalUpiString)}`;
+  };
+
+  const handleCustomerSelect = (customerId: string) => {
+    const customer = customers.find(c => c.id === customerId);
+    if (customer) {
+      setCustomerDetails({
+        name: customer.name,
+        phone: customer.phone,
+        address: customer.address,
+        email: customer.email || ''
+      });
+    }
   };
 
   const handleSaveInvoice = () => {
@@ -178,6 +217,9 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   const handlePrint = () => {
     if (!createdInvoice) return;
 
+    const { total } = calculateTotals();
+    const upiQRUrl = generateUPIQR(total);
+
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
@@ -196,6 +238,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
             .totals { margin-left: auto; width: 300px; }
             .total-row { display: flex; justify-content: space-between; margin: 5px 0; }
             .final-total { font-weight: bold; font-size: 1.2em; border-top: 2px solid #333; padding-top: 10px; }
+            .qr-section { text-align: center; margin-top: 20px; }
             @media print {
               body { margin: 0; }
               .no-print { display: none; }
@@ -256,6 +299,12 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
             </div>
           </div>
           
+          <div class="qr-section">
+            <h3>Pay via UPI</h3>
+            <img src="${upiQRUrl}" alt="UPI QR Code" style="width: 200px; height: 200px;" />
+            <p>Scan to pay ₹${createdInvoice.total.toFixed(2)}</p>
+          </div>
+          
           ${createdInvoice.notes ? `<p><strong>Notes:</strong> ${createdInvoice.notes}</p>` : ''}
         </body>
       </html>
@@ -264,7 +313,6 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     printWindow.document.write(printContent);
     printWindow.document.close();
     
-    // Silent print
     printWindow.onload = () => {
       printWindow.print();
       printWindow.close();
@@ -278,6 +326,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
 
   if (viewMode === 'view' && createdInvoice) {
     const { subtotal, tax, total } = calculateTotals();
+    const upiQRUrl = generateUPIQR(total);
     
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
@@ -369,6 +418,12 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                   </div>
                 </div>
 
+                <div className="text-center">
+                  <h3 className="text-lg font-medium mb-4">Pay via UPI</h3>
+                  <img src={upiQRUrl} alt="UPI QR Code" className="mx-auto w-48 h-48" />
+                  <p className="mt-2 text-sm text-muted-foreground">Scan to pay ₹{total.toFixed(2)}</p>
+                </div>
+
                 {notes && (
                   <div>
                     <h3 className="text-lg font-medium mb-2">Notes</h3>
@@ -402,6 +457,21 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
               <CardTitle>Customer Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="customerSelect">Select Customer (Optional)</Label>
+                <Select onValueChange={handleCustomerSelect}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select existing customer or add new" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customers.map((customer) => (
+                      <SelectItem key={customer.id} value={customer.id}>
+                        {customer.name} - {customer.phone}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div>
                 <Label htmlFor="customerName">Customer Name</Label>
                 <Input

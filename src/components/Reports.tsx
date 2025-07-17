@@ -1,10 +1,13 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChart3, TrendingUp, IndianRupee, Calendar, Download, FileText, Users, Package, Sparkles } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { BarChart3, TrendingUp, IndianRupee, Calendar, Download, FileText, Users, Package, Sparkles, QrCode } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface ReportData {
   totalRevenue: number;
@@ -34,10 +37,31 @@ const Reports: React.FC = () => {
   const [dateRange, setDateRange] = useState('30');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [upiSettings, setUpiSettings] = useState({
+    upiString: 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=${amount}&cu=INR'
+  });
+
+  const { toast } = useToast();
 
   useEffect(() => {
     generateReport();
+    loadUpiSettings();
   }, [dateRange, startDate, endDate]);
+
+  const loadUpiSettings = () => {
+    const savedSettings = localStorage.getItem('upiSettings');
+    if (savedSettings) {
+      setUpiSettings(JSON.parse(savedSettings));
+    }
+  };
+
+  const saveUpiSettings = () => {
+    localStorage.setItem('upiSettings', JSON.stringify(upiSettings));
+    toast({
+      title: "UPI Settings Saved",
+      description: "Your UPI payment settings have been updated successfully."
+    });
+  };
 
   const generateReport = () => {
     const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
@@ -348,6 +372,37 @@ ${reportData.recentInvoices.map(invoice =>
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <QrCode className="h-5 w-5" />
+            UPI Payment Settings
+          </CardTitle>
+          <CardDescription>
+            Configure your UPI payment link for invoice QR codes
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label htmlFor="upiString">UPI Payment Link</Label>
+            <Textarea
+              id="upiString"
+              value={upiSettings.upiString}
+              onChange={(e) => setUpiSettings({ ...upiSettings, upiString: e.target.value })}
+              placeholder="upi://pay?pa=your-upi-id@bank&pn=Your+Name&tn=Invoice+Payment&am=${amount}&cu=INR"
+              className="font-mono text-sm"
+              rows={3}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Use ${'{'}amount{'}'} as placeholder for the invoice amount. This will be replaced automatically when generating QR codes.
+            </p>
+          </div>
+          <Button onClick={saveUpiSettings}>
+            Save UPI Settings
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

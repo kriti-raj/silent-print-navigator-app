@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, Users, FileText, BarChart3, Store, Plus, Wrench, TrendingUp, Smartphone } from "lucide-react";
+import { Package, Users, FileText, BarChart3, Store, Plus, TrendingUp, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Products from "@/components/Products";
 import Customers from "@/components/Customers";
@@ -10,7 +10,6 @@ import Invoices from "@/components/Invoices";
 import InvoiceBuilder from "@/components/InvoiceBuilder";
 import ProtectedReports from "@/components/ProtectedReports";
 import StoreSettings from "@/components/StoreSettings";
-import ConnectionInfo from "@/components/ConnectionInfo";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -29,7 +28,7 @@ const Index = () => {
     }
   };
 
-  // Quick stats for dashboard (removed today's revenue)
+  // Quick stats for dashboard
   const getQuickStats = () => {
     const products = JSON.parse(localStorage.getItem('products') || '[]');
     const customers = JSON.parse(localStorage.getItem('customers') || '[]');
@@ -79,7 +78,7 @@ const Index = () => {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7 lg:w-fit lg:grid-cols-7">
+          <TabsList className="grid w-full grid-cols-6 lg:w-fit lg:grid-cols-6">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4" />
               Dashboard
@@ -103,10 +102,6 @@ const Index = () => {
             <TabsTrigger value="settings" className="flex items-center gap-2">
               <Store className="h-4 w-4" />
               Store
-            </TabsTrigger>
-            <TabsTrigger value="connection" className="flex items-center gap-2">
-              <Wrench className="h-4 w-4" />
-              Connection
             </TabsTrigger>
           </TabsList>
 
@@ -165,69 +160,41 @@ const Index = () => {
               </Card>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
-                    Quick Actions
-                  </CardTitle>
-                  <CardDescription>Frequently used actions</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Button 
-                    onClick={handleCreateInvoice}
-                    className="w-full justify-start"
-                    variant="outline"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create New Invoice
-                  </Button>
-                  <Button 
-                    onClick={() => setActiveTab("products")}
-                    className="w-full justify-start"
-                    variant="outline"
-                  >
-                    <Package className="mr-2 h-4 w-4" />
-                    Manage Products
-                  </Button>
-                  <Button 
-                    onClick={() => setActiveTab("customers")}
-                    className="w-full justify-start"
-                    variant="outline"
-                  >
-                    <Users className="mr-2 h-4 w-4" />
-                    Manage Customers
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5" />
-                    Recent Activity
-                  </CardTitle>
-                  <CardDescription>Latest transactions and updates</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Last invoice created</span>
-                      <span>Just now</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Products updated</span>
-                      <span>2 hours ago</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Customer added</span>
-                      <span>Yesterday</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Quick Actions
+                </CardTitle>
+                <CardDescription>Frequently used actions</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button 
+                  onClick={handleCreateInvoice}
+                  className="w-full justify-start"
+                  variant="outline"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create New Invoice
+                </Button>
+                <Button 
+                  onClick={() => setActiveTab("products")}
+                  className="w-full justify-start"
+                  variant="outline"
+                >
+                  <Package className="mr-2 h-4 w-4" />
+                  Manage Products
+                </Button>
+                <Button 
+                  onClick={() => setActiveTab("customers")}
+                  className="w-full justify-start"
+                  variant="outline"
+                >
+                  <Users className="mr-2 h-4 w-4" />
+                  Manage Customers
+                </Button>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="products">
@@ -251,10 +218,6 @@ const Index = () => {
 
           <TabsContent value="settings">
             <StoreSettings />
-          </TabsContent>
-
-          <TabsContent value="connection">
-            <ConnectionInfo />
           </TabsContent>
         </Tabs>
       </div>
