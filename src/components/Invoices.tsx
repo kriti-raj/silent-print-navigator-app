@@ -98,31 +98,88 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
     setInvoices(updatedInvoices);
   };
 
+  // Normalize invoice data to ensure compatibility with old invoices
+  const normalizeInvoice = (invoice: any): Invoice => {
+    // Get default store info if not present
+    const defaultStoreInfo = JSON.parse(localStorage.getItem('storeSettings') || '{}');
+    
+    return {
+      id: invoice.id || '',
+      invoiceNumber: invoice.invoiceNumber || '',
+      customerDetails: {
+        name: invoice.customerDetails?.name || invoice.customer?.name || '',
+        phone: invoice.customerDetails?.phone || invoice.customer?.phone || '',
+        address: invoice.customerDetails?.address || invoice.customer?.address || '',
+        email: invoice.customerDetails?.email || invoice.customer?.email
+      },
+      storeInfo: invoice.storeInfo || {
+        name: defaultStoreInfo.businessName || 'Your Business',
+        address: defaultStoreInfo.address || 'Your Address',
+        phone: defaultStoreInfo.phone || 'Your Phone',
+        email: defaultStoreInfo.email || 'your@email.com',
+        taxId: defaultStoreInfo.gstNumber || 'GST123456789',
+        website: defaultStoreInfo.website || '',
+        logo: defaultStoreInfo.logo,
+        paymentQR: defaultStoreInfo.paymentQR
+      },
+      date: invoice.date || new Date().toISOString(),
+      items: invoice.items || [],
+      subtotal: invoice.subtotal || 0,
+      tax: invoice.tax || 0,
+      total: invoice.total || 0,
+      status: invoice.status || 'draft',
+      notes: invoice.notes || '',
+      watermarkId: invoice.watermarkId || '',
+      gstEnabled: invoice.gstEnabled !== undefined ? invoice.gstEnabled : true
+    };
+  };
+
   const handlePrint = async (invoice: Invoice) => {
     try {
+      console.log('Printing invoice:', invoice.invoiceNumber);
+      
+      // Normalize the invoice to ensure all required fields are present
+      const normalizedInvoice = normalizeInvoice(invoice);
+      
       // Get printer settings
       const printerSettings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
       
-      // Use silent printing if enabled
-      if (printerSettings.silentPrinting) {
-        const success = await invoiceApiService.silentPrint(invoice, printerSettings);
+      // Generate print content
+      const printContent = generatePrintContent(normalizedInvoice, printerSettings);
+      
+      // Create a hidden iframe for printing
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'absolute';
+      iframe.style.left = '-9999px';
+      iframe.style.width = '0px';
+      iframe.style.height = '0px';
+      
+      document.body.appendChild(iframe);
+      
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (iframeDoc) {
+        iframeDoc.open();
+        iframeDoc.write(printContent);
+        iframeDoc.close();
         
-        if (success) {
-          // Auto mark as printed if enabled
-          if (printerSettings.autoMarkAsPrinted && invoice.status === 'draft') {
-            updateInvoiceStatus(invoice.id, 'sent');
-          }
-          
-          toast({
-            title: "Invoice Printed",
-            description: `Invoice ${invoice.invoiceNumber} has been sent to printer successfully.`
-          });
-        } else {
-          // Fallback to regular printing
-          handleRegularPrint(invoice, printerSettings);
+        // Wait for content to load then print silently
+        setTimeout(() => {
+          iframe.contentWindow?.print();
+          // Remove iframe after printing
+          setTimeout(() => {
+            document.body.removeChild(iframe);
+          }, 1000);
+        }, 500);
+        
+        // Auto mark as printed if enabled and status is draft
+        if (printerSettings.autoMarkAsPrinted && normalizedInvoice.status === 'draft') {
+          updateInvoiceStatus(normalizedInvoice.id, 'sent');
         }
-      } else {
-        handleRegularPrint(invoice, printerSettings);
+        
+        toast({
+          title: "Invoice Printed",
+          description: `Invoice ${normalizedInvoice.invoiceNumber} has been sent to printer successfully.`
+        });
       }
     } catch (error) {
       console.error('Printing error:', error);
@@ -134,18 +191,14 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
     }
   };
 
-  const handleRegularPrint = (invoice: Invoice, printerSettings: any) => {
-    // Create a new window for printing
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
-    const printContent = `
+  const generatePrintContent = (invoice: Invoice, printerSettings: any): string => {
+    return `
       <!DOCTYPE html>
       <html>
         <head>
           <title>Invoice ${invoice.invoiceNumber}</title>
           <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
+            body { font-family: Arial, sans-serif; margin: 20px; color: #000; }
             .header { text-align: center; margin-bottom: 20px; }
             .invoice-details { margin-bottom: 20px; }
             .items-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
@@ -154,6 +207,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
             .totals { margin-left: auto; width: 300px; }
             .total-row { display: flex; justify-content: space-between; margin: 5px 0; }
             .final-total { font-weight: bold; font-size: 1.2em; border-top: 2px solid #333; padding-top: 10px; }
+            .qr-section { text-align: center; margin-top: 20px; }
             @media print {
               body { margin: 0; }
               .no-print { display: none; }
@@ -215,41 +269,23 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
             </div>
           </div>
           
-          ${invoice.notes ? `<p><strong>Notes:</strong> ${invoice.notes}</p>` : ''}
+          ${invoice.notes ? `<p style="margin-top: 20px;"><strong>Notes:</strong> ${invoice.notes}</p>` : ''}
           
           ${invoice.storeInfo.paymentQR ? `
-            <div style="text-align: center; margin-top: 20px;">
-              <p style="font-size: 12px; margin-bottom: 5px;">Scan to Pay</p>
-              <img src="${invoice.storeInfo.paymentQR}" alt="Payment QR" style="height: 60px;">
+            <div class="qr-section">
+              <p style="font-size: 14px; margin-bottom: 10px; font-weight: bold;">Scan to Pay</p>
+              <img src="${invoice.storeInfo.paymentQR}" alt="Payment QR" style="height: 80px;">
             </div>
           ` : ''}
-          
-          <div class="no-print" style="margin-top: 20px;">
-            <button onclick="window.print()">Print Invoice</button>
-            <button onclick="window.close()">Close</button>
-          </div>
         </body>
       </html>
     `;
+  };
 
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    
-    // Auto print
-    printWindow.onload = () => {
-      printWindow.print();
-    };
-
-    // Auto mark as printed if enabled
-    const settings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
-    if (settings.autoMarkAsPrinted && invoice.status === 'draft') {
-      updateInvoiceStatus(invoice.id, 'sent');
-    }
-
-    toast({
-      title: "Invoice Printed",
-      description: `Invoice ${invoice.invoiceNumber} has been sent to printer.`
-    });
+  const handleViewInvoice = (invoice: Invoice) => {
+    // Normalize the invoice before setting it as selected
+    const normalizedInvoice = normalizeInvoice(invoice);
+    setSelectedInvoice(normalizedInvoice);
   };
 
   const getStatusIcon = (status: string) => {
@@ -276,7 +312,8 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
 
   const filteredInvoices = invoices.filter(invoice => {
     const matchesSearch = invoice.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         invoice.customerDetails.name.toLowerCase().includes(searchTerm.toLowerCase());
+                         invoice.customerDetails?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         invoice.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesTab = activeTab === 'all' || invoice.status === activeTab;
     
@@ -358,7 +395,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
                         <div>
                           <CardTitle className="text-lg">Invoice #{invoice.invoiceNumber}</CardTitle>
                           <CardDescription>
-                            {invoice.customerDetails.name} • {new Date(invoice.date).toLocaleDateString()}
+                            {invoice.customerDetails?.name || invoice.customer?.name} • {new Date(invoice.date).toLocaleDateString()}
                           </CardDescription>
                         </div>
                       </div>
@@ -367,7 +404,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
                           {invoice.status}
                         </Badge>
                         <div className="flex items-center space-x-1">
-                          <Button variant="outline" size="sm" onClick={() => setSelectedInvoice(invoice)}>
+                          <Button variant="outline" size="sm" onClick={() => handleViewInvoice(invoice)}>
                             <Eye className="h-4 w-4" />
                           </Button>
                           <Button variant="outline" size="sm" onClick={() => handlePrint(invoice)}>
@@ -384,18 +421,18 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <p className="text-sm text-muted-foreground">Customer</p>
-                        <p className="font-medium">{invoice.customerDetails.name}</p>
-                        <p className="text-sm text-muted-foreground">{invoice.customerDetails.phone}</p>
+                        <p className="font-medium">{invoice.customerDetails?.name || invoice.customer?.name}</p>
+                        <p className="text-sm text-muted-foreground">{invoice.customerDetails?.phone || invoice.customer?.phone}</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Items</p>
-                        <p className="font-medium">{invoice.items.length} item(s)</p>
+                        <p className="font-medium">{invoice.items?.length || 0} item(s)</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Total Amount</p>
                         <p className="font-medium text-lg flex items-center gap-1">
                           <IndianRupee className="h-4 w-4" />
-                          {invoice.total.toFixed(2)}
+                          {(invoice.total || 0).toFixed(2)}
                         </p>
                       </div>
                     </div>
@@ -454,8 +491,8 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
                       </tr>
                     </thead>
                     <tbody>
-                      {selectedInvoice.items.map((item) => (
-                        <tr key={item.id} className="border-t">
+                      {selectedInvoice.items.map((item, index) => (
+                        <tr key={item.id || index} className="border-t">
                           <td className="p-3">
                             {item.finalName || `${item.productName} - ${item.colorCode}`}
                           </td>
@@ -494,6 +531,17 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
                   <p className="text-sm text-muted-foreground p-3 bg-muted rounded">
                     {selectedInvoice.notes}
                   </p>
+                </div>
+              )}
+
+              {selectedInvoice.storeInfo.paymentQR && (
+                <div className="text-center border-t pt-6">
+                  <p className="text-sm font-medium mb-3">Scan to Pay</p>
+                  <img 
+                    src={selectedInvoice.storeInfo.paymentQR} 
+                    alt="Payment QR Code" 
+                    className="mx-auto h-24 w-24"
+                  />
                 </div>
               )}
             </div>
