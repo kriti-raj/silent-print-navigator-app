@@ -47,6 +47,19 @@ interface Invoice {
   gstEnabled: boolean;
 }
 
+interface StoreSettings {
+  businessName?: string;
+  name?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  gstNumber?: string;
+  taxId?: string;
+  website?: string;
+  logo?: string;
+  paymentQR?: string;
+}
+
 interface InvoicesProps {
   onCreateNew: () => void;
   highlightInvoiceId?: string;
@@ -60,19 +73,19 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
   const [showTodayOnly, setShowTodayOnly] = useState(true);
   const { toast } = useToast();
 
-  // Fixed function to get current store settings
+  // Fixed function to get current store settings with proper typing
   const getCurrentStoreSettings = () => {
     console.log('Getting current store settings in Invoices...');
     
     // Try different possible keys where store settings might be stored
     const possibleKeys = ['storeSettings', 'store_settings', 'businessSettings'];
-    let storeSettings = {};
+    let storeSettings: StoreSettings = {};
     
     for (const key of possibleKeys) {
       const settings = localStorage.getItem(key);
       if (settings) {
         try {
-          storeSettings = JSON.parse(settings);
+          storeSettings = JSON.parse(settings) as StoreSettings;
           console.log(`Found store settings in key: ${key}`, storeSettings);
           break;
         } catch (e) {

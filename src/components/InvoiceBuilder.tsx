@@ -56,6 +56,19 @@ interface SavedInvoice {
   status: string;
 }
 
+interface StoreSettings {
+  businessName?: string;
+  name?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  gstNumber?: string;
+  taxId?: string;
+  website?: string;
+  logo?: string;
+  paymentQR?: string;
+}
+
 interface InvoiceBuilderProps {
   onClose: (newInvoiceId?: string) => void;
 }
@@ -89,19 +102,19 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   const [notes, setNotes] = useState('');
   const { toast } = useToast();
 
-  // Fixed function to get current store settings
+  // Fixed function to get current store settings with proper typing
   const getCurrentStoreSettings = () => {
     console.log('Getting current store settings...');
     
     // Try different possible keys where store settings might be stored
     const possibleKeys = ['storeSettings', 'store_settings', 'businessSettings'];
-    let storeSettings = {};
+    let storeSettings: StoreSettings = {};
     
     for (const key of possibleKeys) {
       const settings = localStorage.getItem(key);
       if (settings) {
         try {
-          storeSettings = JSON.parse(settings);
+          storeSettings = JSON.parse(settings) as StoreSettings;
           console.log(`Found store settings in key: ${key}`, storeSettings);
           break;
         } catch (e) {
