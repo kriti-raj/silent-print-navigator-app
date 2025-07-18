@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -71,14 +70,12 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   const [includeQR, setIncludeQR] = useState<boolean>(true);
   const [storeInfo, setStoreInfo] = useState<any>({});
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
-
   const [customerDetails, setCustomerDetails] = useState({
     name: '',
     phone: '',
     address: '',
     email: ''
   });
-
   const [items, setItems] = useState<InvoiceItem[]>([{
     id: '1',
     productName: '',
@@ -89,23 +86,58 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     total: 0,
     unit: 'liters'
   }]);
-
   const [notes, setNotes] = useState('');
   const { toast } = useToast();
 
-  // Function to get current store settings
+  // Fixed function to get current store settings
   const getCurrentStoreSettings = () => {
-    const storeSettings = JSON.parse(localStorage.getItem('storeSettings') || '{}');
-    return {
-      name: storeSettings.businessName || 'Your Business Name',
+    console.log('Getting current store settings...');
+    
+    // Try different possible keys where store settings might be stored
+    const possibleKeys = ['storeSettings', 'store_settings', 'businessSettings'];
+    let storeSettings = {};
+    
+    for (const key of possibleKeys) {
+      const settings = localStorage.getItem(key);
+      if (settings) {
+        try {
+          storeSettings = JSON.parse(settings);
+          console.log(`Found store settings in key: ${key}`, storeSettings);
+          break;
+        } catch (e) {
+          console.error(`Error parsing settings from key ${key}:`, e);
+        }
+      }
+    }
+    
+    // If no settings found, create default structure
+    if (Object.keys(storeSettings).length === 0) {
+      console.log('No store settings found, using defaults');
+      storeSettings = {
+        businessName: 'Your Business Name',
+        address: 'Your Business Address',
+        phone: '+91 00000 00000',
+        email: 'your@email.com',
+        gstNumber: 'GST000000000',
+        website: 'www.yourbusiness.com',
+        logo: '',
+        paymentQR: ''
+      };
+    }
+    
+    const finalSettings = {
+      name: storeSettings.businessName || storeSettings.name || 'Your Business Name',
       address: storeSettings.address || 'Your Business Address',
       phone: storeSettings.phone || '+91 00000 00000',
       email: storeSettings.email || 'your@email.com',
-      taxId: storeSettings.gstNumber || 'GST000000000',
+      taxId: storeSettings.gstNumber || storeSettings.taxId || 'GST000000000',
       website: storeSettings.website || 'www.yourbusiness.com',
       logo: storeSettings.logo || '',
       paymentQR: storeSettings.paymentQR || ''
     };
+    
+    console.log('Final store settings:', finalSettings);
+    return finalSettings;
   };
 
   useEffect(() => {
@@ -192,22 +224,37 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   };
 
   const generateUPIQR = (amount: number) => {
-    if (!includeQR) return '';
+    console.log('Generating UPI QR for amount:', amount, 'includeQR:', includeQR);
+    
+    if (!includeQR) {
+      console.log('QR generation disabled by checkbox');
+      return '';
+    }
     
     const currentStoreSettings = getCurrentStoreSettings();
+    console.log('Current store settings for QR:', currentStoreSettings);
     
     // First try to use store settings QR
     if (currentStoreSettings.paymentQR) {
+      console.log('Using store settings QR:', currentStoreSettings.paymentQR);
       return currentStoreSettings.paymentQR;
     }
     
     // Then try UPI string with offline generation
     const upiSettings = JSON.parse(localStorage.getItem('upiSettings') || '{}');
-    const upiString = upiSettings.upiString || 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=${amount}&cu=INR';
+    console.log('UPI Settings found:', upiSettings);
+    
+    const defaultUpiString = 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=${amount}&cu=INR';
+    const upiString = upiSettings.upiString || defaultUpiString;
     const finalUpiString = upiString.replace('${amount}', amount.toString());
     
+    console.log('Final UPI string:', finalUpiString);
+    
     // Generate offline QR code
-    return generateQRCodeDataURL(finalUpiString, 150);
+    const qrUrl = generateQRCodeDataURL(finalUpiString, 150);
+    console.log('Generated QR URL:', qrUrl ? 'Generated successfully' : 'Failed to generate');
+    
+    return qrUrl;
   };
 
   const handleCustomerSelect = (customerId: string) => {
@@ -227,6 +274,8 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     const { subtotal, tax, total } = calculateTotals();
     const invoiceNumber = generateInvoiceNumber();
     const currentStoreInfo = getCurrentStoreSettings(); // Always use current settings
+    
+    console.log('Saving invoice with store info:', currentStoreInfo);
     
     const invoice: SavedInvoice = {
       id: Date.now().toString(),
@@ -277,6 +326,9 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   };
 
   const generateInvoiceHTML = (invoice: SavedInvoice, currentStoreInfo: any, upiQRUrl: string) => {
+    console.log('Generating HTML with store info:', currentStoreInfo);
+    console.log('UPI QR URL:', upiQRUrl ? 'Present' : 'Not present');
+    
     const printerSettings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
     const paperSize = printerSettings.paperSize || 'A4';
     const margins = printerSettings.margins || 10;
@@ -581,7 +633,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
             </div>
             
             <div class="footer-section">
-              ${includeQR && upiQRUrl ? `
+              ${upiQRUrl ? `
                 <div class="qr-section">
                   <div class="qr-title">Payment QR Code</div>
                   <img src="${upiQRUrl}" alt="Payment QR" />
@@ -657,6 +709,9 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     const currentStoreInfo = getCurrentStoreSettings(); // Always use current settings
     const upiQRUrl = generateUPIQR(total);
 
+    console.log('Printing with store info:', currentStoreInfo);
+    console.log('UPI QR URL for printing:', upiQRUrl ? 'Generated' : 'Not generated');
+
     // Generate the exact same HTML for both printing and saving
     const htmlContent = generateInvoiceHTML(createdInvoice, currentStoreInfo, upiQRUrl);
 
@@ -702,6 +757,9 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     const { subtotal, tax, total } = calculateTotals();
     const currentStoreInfo = getCurrentStoreSettings(); // Always use current settings
     const upiQRUrl = generateUPIQR(total);
+    
+    console.log('View mode - Store info:', currentStoreInfo);
+    console.log('View mode - QR URL:', upiQRUrl ? 'Generated' : 'Not generated');
     
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 p-6">
@@ -775,7 +833,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                 </div>
 
                 <div className="flex justify-between items-start">
-                  {includeQR && upiQRUrl && (
+                  {upiQRUrl && (
                     <div className="text-center bg-gradient-to-r from-yellow-50 to-orange-50 p-4 rounded-lg border-2 border-dashed border-orange-300">
                       <h3 className="text-lg font-medium mb-2 text-orange-800">Payment QR</h3>
                       <img src={upiQRUrl} alt="Payment QR Code" className="w-24 h-24 mx-auto border rounded" />
@@ -928,7 +986,10 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                 <Checkbox 
                   id="includeQR" 
                   checked={includeQR}
-                  onCheckedChange={(checked) => setIncludeQR(checked as boolean)}
+                  onCheckedChange={(checked) => {
+                    console.log('QR checkbox changed:', checked);
+                    setIncludeQR(checked as boolean);
+                  }}
                 />
                 <Label htmlFor="includeQR" className="text-purple-700 font-medium">Include Payment QR Code</Label>
               </div>

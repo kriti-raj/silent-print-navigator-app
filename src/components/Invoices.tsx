@@ -60,19 +60,55 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
   const [showTodayOnly, setShowTodayOnly] = useState(true);
   const { toast } = useToast();
 
-  // Function to get current store settings
+  // Fixed function to get current store settings
   const getCurrentStoreSettings = () => {
-    const storeSettings = JSON.parse(localStorage.getItem('storeSettings') || '{}');
-    return {
-      name: storeSettings.businessName || 'Your Business Name',
+    console.log('Getting current store settings in Invoices...');
+    
+    // Try different possible keys where store settings might be stored
+    const possibleKeys = ['storeSettings', 'store_settings', 'businessSettings'];
+    let storeSettings = {};
+    
+    for (const key of possibleKeys) {
+      const settings = localStorage.getItem(key);
+      if (settings) {
+        try {
+          storeSettings = JSON.parse(settings);
+          console.log(`Found store settings in key: ${key}`, storeSettings);
+          break;
+        } catch (e) {
+          console.error(`Error parsing settings from key ${key}:`, e);
+        }
+      }
+    }
+    
+    // If no settings found, create default structure
+    if (Object.keys(storeSettings).length === 0) {
+      console.log('No store settings found, using defaults');
+      storeSettings = {
+        businessName: 'Your Business Name',
+        address: 'Your Business Address',
+        phone: '+91 00000 00000',
+        email: 'your@email.com',
+        gstNumber: 'GST000000000',
+        website: 'www.yourbusiness.com',
+        logo: '',
+        paymentQR: ''
+      };
+    }
+    
+    const finalSettings = {
+      name: storeSettings.businessName || storeSettings.name || 'Your Business Name',
       address: storeSettings.address || 'Your Business Address',
       phone: storeSettings.phone || '+91 00000 00000',
       email: storeSettings.email || 'your@email.com',
-      taxId: storeSettings.gstNumber || 'GST000000000',
+      taxId: storeSettings.gstNumber || storeSettings.taxId || 'GST000000000',
       website: storeSettings.website || 'www.yourbusiness.com',
       logo: storeSettings.logo || '',
       paymentQR: storeSettings.paymentQR || ''
     };
+    
+    console.log('Final store settings in Invoices:', finalSettings);
+    return finalSettings;
   };
 
   useEffect(() => {
@@ -176,20 +212,35 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
   };
 
   const generateUPIQR = (amount: number) => {
+    console.log('Generating UPI QR in Invoices for amount:', amount);
+    
     const currentStoreSettings = getCurrentStoreSettings();
+    console.log('Current store settings for QR in Invoices:', currentStoreSettings);
     
     if (currentStoreSettings.paymentQR) {
+      console.log('Using store settings QR in Invoices:', currentStoreSettings.paymentQR);
       return currentStoreSettings.paymentQR;
     }
     
     const upiSettings = JSON.parse(localStorage.getItem('upiSettings') || '{}');
-    const upiString = upiSettings.upiString || 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=${amount}&cu=INR';
+    console.log('UPI Settings found in Invoices:', upiSettings);
+    
+    const defaultUpiString = 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=${amount}&cu=INR';
+    const upiString = upiSettings.upiString || defaultUpiString;
     const finalUpiString = upiString.replace('${amount}', amount.toString());
     
-    return generateQRCodeDataURL(finalUpiString, 150);
+    console.log('Final UPI string in Invoices:', finalUpiString);
+    
+    const qrUrl = generateQRCodeDataURL(finalUpiString, 150);
+    console.log('Generated QR URL in Invoices:', qrUrl ? 'Generated successfully' : 'Failed to generate');
+    
+    return qrUrl;
   };
 
   const generateInvoiceHTML = (invoice: Invoice, currentStoreInfo: any, upiQRUrl: string) => {
+    console.log('Generating HTML in Invoices with store info:', currentStoreInfo);
+    console.log('UPI QR URL in Invoices:', upiQRUrl ? 'Present' : 'Not present');
+    
     const printerSettings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
     const paperSize = printerSettings.paperSize || 'A4';
     const margins = printerSettings.margins || 10;
@@ -543,6 +594,9 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
       const normalizedInvoice = normalizeInvoice(invoice);
       const currentStoreInfo = getCurrentStoreSettings(); // Always use current settings
       const upiQRUrl = generateUPIQR(normalizedInvoice.total);
+
+      console.log('Printing with store info in Invoices:', currentStoreInfo);
+      console.log('UPI QR URL for printing in Invoices:', upiQRUrl ? 'Generated' : 'Not generated');
 
       // Generate the exact same HTML for both printing and saving
       const htmlContent = generateInvoiceHTML(normalizedInvoice, currentStoreInfo, upiQRUrl);
