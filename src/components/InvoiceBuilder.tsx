@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,6 @@ interface InvoiceItem {
   productName: string;
   colorCode: string;
   volume: string;
-  finalName: string;
   quantity: number;
   rate: number;
   total: number;
@@ -84,7 +84,6 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     productName: '',
     colorCode: '',
     volume: '',
-    finalName: '',
     quantity: 1,
     rate: 0,
     total: 0,
@@ -93,6 +92,21 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
 
   const [notes, setNotes] = useState('');
   const { toast } = useToast();
+
+  // Function to get current store settings
+  const getCurrentStoreSettings = () => {
+    const storeSettings = JSON.parse(localStorage.getItem('storeSettings') || '{}');
+    return {
+      name: storeSettings.businessName || 'Your Business Name',
+      address: storeSettings.address || 'Your Business Address',
+      phone: storeSettings.phone || '+91 00000 00000',
+      email: storeSettings.email || 'your@email.com',
+      taxId: storeSettings.gstNumber || 'GST000000000',
+      website: storeSettings.website || 'www.yourbusiness.com',
+      logo: storeSettings.logo || '',
+      paymentQR: storeSettings.paymentQR || ''
+    };
+  };
 
   useEffect(() => {
     const savedProducts = localStorage.getItem('products');
@@ -105,19 +119,8 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       setCustomers(JSON.parse(savedCustomers));
     }
 
-    // Load store settings and sync with invoice
-    const storeSettings = JSON.parse(localStorage.getItem('storeSettings') || '{}');
-    const defaultStoreInfo = {
-      name: storeSettings.businessName || 'Your Business Name',
-      address: storeSettings.address || 'Your Business Address',
-      phone: storeSettings.phone || '+91 00000 00000',
-      email: storeSettings.email || 'your@email.com',
-      taxId: storeSettings.gstNumber || 'GST000000000',
-      website: storeSettings.website || 'www.yourbusiness.com',
-      logo: storeSettings.logo || '',
-      paymentQR: storeSettings.paymentQR || ''
-    };
-    setStoreInfo(defaultStoreInfo);
+    // Always use current store settings
+    setStoreInfo(getCurrentStoreSettings());
   }, []);
 
   const addItem = () => {
@@ -126,7 +129,6 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       productName: '',
       colorCode: '',
       volume: '',
-      finalName: '',
       quantity: 1,
       rate: 0,
       total: 0,
@@ -192,9 +194,11 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   const generateUPIQR = (amount: number) => {
     if (!includeQR) return '';
     
+    const currentStoreSettings = getCurrentStoreSettings();
+    
     // First try to use store settings QR
-    if (storeInfo.paymentQR) {
-      return storeInfo.paymentQR;
+    if (currentStoreSettings.paymentQR) {
+      return currentStoreSettings.paymentQR;
     }
     
     // Then try UPI string with offline generation
@@ -222,6 +226,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   const handleSaveInvoice = () => {
     const { subtotal, tax, total } = calculateTotals();
     const invoiceNumber = generateInvoiceNumber();
+    const currentStoreInfo = getCurrentStoreSettings(); // Always use current settings
     
     const invoice: SavedInvoice = {
       id: Date.now().toString(),
@@ -231,7 +236,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       items,
       notes,
       watermarkId: '',
-      storeInfo, // Use current store info
+      storeInfo: currentStoreInfo, // Use current store info
       subtotal,
       tax,
       total,
@@ -271,6 +276,353 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     });
   };
 
+  const generateInvoiceHTML = (invoice: SavedInvoice, currentStoreInfo: any, upiQRUrl: string) => {
+    const printerSettings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
+    const paperSize = printerSettings.paperSize || 'A4';
+    const margins = printerSettings.margins || 10;
+
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Invoice ${invoice.invoiceNumber}</title>
+          <style>
+            @media print { 
+              @page { 
+                margin: ${margins}mm; 
+                size: ${paperSize};
+              }
+              body { 
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+            }
+            * {
+              box-sizing: border-box;
+            }
+            body { 
+              font-family: 'Arial', sans-serif; 
+              margin: 0; 
+              padding: 20px;
+              font-size: ${paperSize === 'A5' ? '11px' : '13px'};
+              line-height: 1.4;
+              color: #333;
+              background: #f8f9fa;
+            }
+            .invoice-container {
+              max-width: 800px;
+              margin: 0 auto;
+              background: white;
+              box-shadow: 0 0 20px rgba(0,0,0,0.1);
+              border-radius: 8px;
+              overflow: hidden;
+            }
+            .header { 
+              text-align: center; 
+              padding: 25px;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+            }
+            .store-logo { 
+              height: 60px; 
+              margin-bottom: 15px; 
+              border-radius: 8px;
+            }
+            .store-name {
+              font-size: 28px;
+              font-weight: bold;
+              margin: 10px 0;
+              text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            }
+            .store-details {
+              font-size: 14px;
+              margin: 5px 0;
+              opacity: 0.9;
+            }
+            .invoice-details { 
+              display: flex; 
+              justify-content: space-between;
+              padding: 25px;
+              background: #f8f9fa;
+              border-bottom: 2px solid #e9ecef;
+            }
+            .invoice-info, .customer-info {
+              flex: 1;
+            }
+            .invoice-info {
+              text-align: left;
+            }
+            .customer-info {
+              text-align: right;
+              padding-left: 20px;
+            }
+            .section-title {
+              font-size: 16px;
+              font-weight: bold;
+              color: #667eea;
+              margin-bottom: 10px;
+              border-bottom: 2px solid #667eea;
+              padding-bottom: 5px;
+            }
+            .info-line {
+              margin: 8px 0;
+              display: flex;
+              align-items: center;
+            }
+            .info-label {
+              font-weight: bold;
+              margin-right: 8px;
+              color: #495057;
+            }
+            .status-badge {
+              background: #e7f3ff;
+              color: #0066cc;
+              padding: 4px 12px;
+              border-radius: 20px;
+              font-size: 12px;
+              font-weight: bold;
+              text-transform: uppercase;
+            }
+            .items-section {
+              padding: 25px;
+            }
+            .items-table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin-top: 15px;
+              border-radius: 8px;
+              overflow: hidden;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
+            .items-table th {
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+              padding: 15px 12px;
+              text-align: left;
+              font-weight: bold;
+              font-size: 14px;
+            }
+            .items-table td { 
+              padding: 12px; 
+              border-bottom: 1px solid #e9ecef;
+              vertical-align: top;
+            }
+            .items-table tr:nth-child(even) { 
+              background-color: #f8f9fa; 
+            }
+            .items-table tr:hover {
+              background-color: #e3f2fd;
+            }
+            .item-name {
+              font-weight: 600;
+              color: #333;
+            }
+            .item-total {
+              font-weight: bold;
+              color: #667eea;
+              font-size: 15px;
+            }
+            .footer-section { 
+              display: flex; 
+              justify-content: space-between; 
+              align-items: flex-start; 
+              padding: 25px;
+              background: #f8f9fa;
+            }
+            .qr-section { 
+              text-align: center; 
+              padding: 20px;
+              background: white;
+              border: 2px dashed #667eea;
+              border-radius: 12px;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
+            .qr-title {
+              font-weight: bold;
+              color: #667eea;
+              margin-bottom: 10px;
+              font-size: 14px;
+            }
+            .qr-section img { 
+              width: 120px; 
+              height: 120px; 
+              border: 2px solid #667eea;
+              border-radius: 8px;
+            }
+            .qr-amount {
+              margin-top: 8px;
+              font-size: 12px;
+              color: #666;
+              font-weight: 500;
+            }
+            .totals { 
+              background: white;
+              padding: 20px;
+              border-radius: 8px;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+              min-width: 280px;
+            }
+            .total-row { 
+              display: flex; 
+              justify-content: space-between; 
+              margin: 10px 0; 
+              padding: 8px 0; 
+              border-bottom: 1px solid #e9ecef;
+              font-size: 14px;
+            }
+            .total-label {
+              color: #495057;
+              font-weight: 500;
+            }
+            .total-value {
+              font-weight: bold;
+              color: #333;
+            }
+            .final-total { 
+              border-top: 3px solid #667eea !important;
+              border-bottom: none !important;
+              padding-top: 15px !important;
+              margin-top: 10px;
+              font-size: 18px;
+            }
+            .final-total .total-label {
+              color: #667eea;
+              font-weight: bold;
+            }
+            .final-total .total-value {
+              color: #667eea;
+              font-size: 20px;
+            }
+            .notes-section {
+              padding: 25px;
+              background: #fff8e1;
+              border-left: 4px solid #ffc107;
+              margin: 20px 25px;
+              border-radius: 0 8px 8px 0;
+            }
+            .notes-title {
+              font-weight: bold;
+              color: #f57c00;
+              margin-bottom: 8px;
+            }
+            .notes-content {
+              color: #5d4037;
+              line-height: 1.5;
+            }
+            .footer-text {
+              text-align: center;
+              padding: 20px;
+              color: #666;
+              font-size: 12px;
+              border-top: 1px solid #e9ecef;
+            }
+            @media print {
+              .invoice-container {
+                box-shadow: none;
+                border-radius: 0;
+              }
+              body {
+                background: white;
+                padding: 0;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="invoice-container">
+            <div class="header">
+              ${currentStoreInfo.logo ? `<img src="${currentStoreInfo.logo}" alt="Store Logo" class="store-logo">` : ''}
+              <div class="store-name">${currentStoreInfo.name}</div>
+              <div class="store-details">${currentStoreInfo.address}</div>
+              <div class="store-details">Phone: ${currentStoreInfo.phone} | Email: ${currentStoreInfo.email}</div>
+              <div class="store-details">GST No: ${currentStoreInfo.taxId}</div>
+            </div>
+            
+            <div class="invoice-details">
+              <div class="invoice-info">
+                <div class="section-title">Invoice Details</div>
+                <div class="info-line"><span class="info-label">Invoice #:</span> ${invoice.invoiceNumber}</div>
+                <div class="info-line"><span class="info-label">Date:</span> ${new Date(invoice.date).toLocaleDateString()}</div>
+                <div class="info-line"><span class="info-label">Status:</span> <span class="status-badge">${invoice.status}</span></div>
+              </div>
+              <div class="customer-info">
+                <div class="section-title">Customer Details</div>
+                <div class="info-line"><span class="info-label">Name:</span> ${invoice.customerDetails.name}</div>
+                <div class="info-line"><span class="info-label">Phone:</span> ${invoice.customerDetails.phone}</div>
+                <div class="info-line"><span class="info-label">Address:</span> ${invoice.customerDetails.address}</div>
+                ${invoice.customerDetails.email ? `<div class="info-line"><span class="info-label">Email:</span> ${invoice.customerDetails.email}</div>` : ''}
+              </div>
+            </div>
+            
+            <div class="items-section">
+              <div class="section-title">Items</div>
+              <table class="items-table">
+                <thead>
+                  <tr>
+                    <th>Item Description</th>
+                    <th style="width: 80px;">Qty</th>
+                    <th style="width: 100px;">Rate</th>
+                    <th style="width: 120px;">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${invoice.items.map(item => `
+                    <tr>
+                      <td class="item-name">
+                        ${item.productName}${item.colorCode ? ` - ${item.colorCode}` : ''}${item.volume ? ` - ${item.volume}` : ''}
+                      </td>
+                      <td style="text-align: center; font-weight: 600;">${item.quantity}</td>
+                      <td style="text-align: right; font-weight: 600;">₹${item.rate.toFixed(2)}</td>
+                      <td class="item-total" style="text-align: right;">₹${item.total.toFixed(2)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+            
+            <div class="footer-section">
+              ${includeQR && upiQRUrl ? `
+                <div class="qr-section">
+                  <div class="qr-title">Payment QR Code</div>
+                  <img src="${upiQRUrl}" alt="Payment QR" />
+                  <div class="qr-amount">Scan to pay ₹${invoice.total.toFixed(2)}</div>
+                </div>
+              ` : '<div></div>'}
+              
+              <div class="totals">
+                <div class="total-row">
+                  <span class="total-label">Subtotal:</span>
+                  <span class="total-value">₹${invoice.subtotal.toFixed(2)}</span>
+                </div>
+                ${invoice.gstEnabled ? `
+                  <div class="total-row">
+                    <span class="total-label">GST (18%):</span>
+                    <span class="total-value">₹${invoice.tax.toFixed(2)}</span>
+                  </div>
+                ` : ''}
+                <div class="total-row final-total">
+                  <span class="total-label">Total:</span>
+                  <span class="total-value">₹${invoice.total.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+            
+            ${invoice.notes ? `
+              <div class="notes-section">
+                <div class="notes-title">Notes:</div>
+                <div class="notes-content">${invoice.notes}</div>
+              </div>
+            ` : ''}
+            
+            <div class="footer-text">
+              Thank you for your business!
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+  };
+
   const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string) => {
     try {
       const currentDate = new Date();
@@ -278,32 +630,21 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       const month = String(currentDate.getMonth() + 1).padStart(2, '0');
       const day = String(currentDate.getDate()).padStart(2, '0');
       
-      // Create folder structure: Invoices/YYYY/MM/DD/
-      const folderPath = `Invoices/${year}/${month}/${day}/`;
-      const fileName = `Invoice_${invoiceNumber}.html`;
-      
-      // For now, we'll save to localStorage as a backup since we can't write to filesystem directly
       const savedInvoices = JSON.parse(localStorage.getItem('savedInvoicePDFs') || '{}');
       if (!savedInvoices[year]) savedInvoices[year] = {};
       if (!savedInvoices[year][month]) savedInvoices[year][month] = {};
       if (!savedInvoices[year][month][day]) savedInvoices[year][month][day] = {};
       
       savedInvoices[year][month][day][invoiceNumber] = {
-        fileName,
+        fileName: `Invoice_${invoiceNumber}.html`,
         content: htmlContent,
         timestamp: currentDate.toISOString(),
-        folderPath
+        folderPath: `Invoices/${year}/${month}/${day}/`
       };
       
       localStorage.setItem('savedInvoicePDFs', JSON.stringify(savedInvoices));
       
-      console.log(`Invoice ${invoiceNumber} saved to ${folderPath}${fileName}`);
-      
-      toast({
-        title: "Invoice Saved",
-        description: `Invoice ${invoiceNumber} has been saved to ${folderPath}`,
-        className: "bg-blue-50 border-blue-200 text-blue-800"
-      });
+      console.log(`Invoice ${invoiceNumber} saved to Invoices/${year}/${month}/${day}/`);
     } catch (error) {
       console.error('Error saving invoice PDF:', error);
     }
@@ -313,203 +654,14 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     if (!createdInvoice) return;
 
     const { total } = calculateTotals();
+    const currentStoreInfo = getCurrentStoreSettings(); // Always use current settings
     const upiQRUrl = generateUPIQR(total);
 
-    const printerSettings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
-    const paperSize = printerSettings.paperSize || 'A4';
-    const margins = printerSettings.margins || 10;
-
-    // Use current store info for printing
-    const currentStoreInfo = JSON.parse(localStorage.getItem('storeSettings') || '{}');
-    const printStoreInfo = {
-      name: currentStoreInfo.businessName || storeInfo.name,
-      address: currentStoreInfo.address || storeInfo.address,
-      phone: currentStoreInfo.phone || storeInfo.phone,
-      email: currentStoreInfo.email || storeInfo.email,
-      taxId: currentStoreInfo.gstNumber || storeInfo.taxId,
-      website: currentStoreInfo.website || storeInfo.website,
-      logo: currentStoreInfo.logo || storeInfo.logo
-    };
-
-    const printContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Invoice ${createdInvoice.invoiceNumber}</title>
-          <style>
-            @media print { @page { margin: ${margins}mm; } }
-            body { 
-              font-family: Arial, sans-serif; 
-              margin: 0; 
-              padding: 0;
-              font-size: ${paperSize === 'A5' ? '12px' : '14px'};
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-              color: #333;
-            }
-            .header { 
-              text-align: center; 
-              margin-bottom: 20px; 
-              border-bottom: 3px solid #667eea; 
-              padding-bottom: 15px;
-              background: white;
-              border-radius: 10px;
-              padding: 20px;
-              box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            }
-            .invoice-details { 
-              margin-bottom: 20px; 
-              display: flex; 
-              justify-content: space-between;
-              background: white;
-              padding: 15px;
-              border-radius: 8px;
-              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }
-            .items-table { 
-              width: 100%; 
-              border-collapse: collapse; 
-              margin-bottom: 20px;
-              background: white;
-              border-radius: 8px;
-              overflow: hidden;
-              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }
-            .items-table th, .items-table td { 
-              border: 1px solid #e1e5e9; 
-              padding: 12px 8px; 
-              text-align: left; 
-            }
-            .items-table th { 
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-              color: white;
-              font-weight: bold; 
-            }
-            .items-table tr:nth-child(even) { background-color: #f8f9fa; }
-            .footer-section { 
-              display: flex; 
-              justify-content: space-between; 
-              align-items: flex-start; 
-              margin-top: 20px;
-              background: white;
-              padding: 20px;
-              border-radius: 8px;
-              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }
-            .qr-section { 
-              text-align: center; 
-              flex: 0 0 150px;
-              padding: 10px;
-              border: 2px dashed #667eea;
-              border-radius: 8px;
-            }
-            .qr-section img { width: 100px; height: 100px; }
-            .totals { 
-              flex: 0 0 300px; 
-              text-align: right;
-              padding: 10px;
-            }
-            .total-row { 
-              display: flex; 
-              justify-content: space-between; 
-              margin: 8px 0; 
-              padding: 5px 0; 
-              border-bottom: 1px solid #eee;
-            }
-            .final-total { 
-              font-weight: bold; 
-              font-size: 1.3em; 
-              border-top: 3px solid #667eea; 
-              padding-top: 10px;
-              color: #667eea;
-            }
-            .store-logo { height: 50px; margin-bottom: 10px; }
-            .notes-section {
-              background: #f8f9fa;
-              padding: 15px;
-              border-radius: 8px;
-              margin-top: 15px;
-              border-left: 4px solid #667eea;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            ${printStoreInfo.logo ? `<img src="${printStoreInfo.logo}" alt="Store Logo" class="store-logo">` : ''}
-            <h1 style="color: #667eea; margin: 10px 0;">${printStoreInfo.name}</h1>
-            <p style="margin: 5px 0;">${printStoreInfo.address}</p>
-            <p style="margin: 5px 0;">Phone: ${printStoreInfo.phone} | Email: ${printStoreInfo.email}</p>
-            <p style="margin: 5px 0; font-weight: bold;">GST No: ${printStoreInfo.taxId}</p>
-          </div>
-          
-          <div class="invoice-details">
-            <div>
-              <h2 style="color: #667eea; margin-bottom: 10px;">Invoice #${createdInvoice.invoiceNumber}</h2>
-              <p style="margin: 5px 0;"><strong>Date:</strong> ${new Date(createdInvoice.date).toLocaleDateString()}</p>
-              <p style="margin: 5px 0;"><strong>Status:</strong> <span style="background: #e7f3ff; padding: 2px 8px; border-radius: 4px; color: #0066cc;">${createdInvoice.status}</span></p>
-            </div>
-            <div style="text-align: right;">
-              <p style="margin: 5px 0;"><strong>Customer:</strong> ${customerDetails.name}</p>
-              <p style="margin: 5px 0;"><strong>Phone:</strong> ${customerDetails.phone}</p>
-              <p style="margin: 5px 0;"><strong>Address:</strong> ${customerDetails.address}</p>
-              ${customerDetails.email ? `<p style="margin: 5px 0;"><strong>Email:</strong> ${customerDetails.email}</p>` : ''}
-            </div>
-          </div>
-          
-          <table class="items-table">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Qty</th>
-                <th>Rate</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${items.map(item => `
-                <tr>
-                  <td>${item.finalName || `${item.productName}${item.colorCode ? ` - ${item.colorCode}` : ''}${item.volume ? ` - ${item.volume}` : ''}`}</td>
-                  <td>${item.quantity}</td>
-                  <td>₹${item.rate.toFixed(2)}</td>
-                  <td><strong>₹${item.total.toFixed(2)}</strong></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-          
-          <div class="footer-section">
-            ${includeQR && upiQRUrl ? `
-              <div class="qr-section">
-                <p style="margin: 5px 0; font-weight: bold; color: #667eea;">Payment QR</p>
-                <img src="${upiQRUrl}" alt="Payment QR" />
-                <p style="margin: 5px 0; font-size: 10px;">Scan to pay ₹${total.toFixed(2)}</p>
-              </div>
-            ` : '<div></div>'}
-            
-            <div class="totals">
-              <div class="total-row">
-                <span>Subtotal:</span>
-                <span><strong>₹${createdInvoice.subtotal.toFixed(2)}</strong></span>
-              </div>
-              ${createdInvoice.gstEnabled ? `
-                <div class="total-row">
-                  <span>GST (18%):</span>
-                  <span><strong>₹${createdInvoice.tax.toFixed(2)}</strong></span>
-                </div>
-              ` : ''}
-              <div class="total-row final-total">
-                <span>Total:</span>
-                <span>₹${createdInvoice.total.toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-          
-          ${notes ? `<div class="notes-section"><strong>Notes:</strong> ${notes}</div>` : ''}
-        </body>
-      </html>
-    `;
+    // Generate the exact same HTML for both printing and saving
+    const htmlContent = generateInvoiceHTML(createdInvoice, currentStoreInfo, upiQRUrl);
 
     // Save invoice PDF with same content as printed
-    saveInvoicePDF(createdInvoice.invoiceNumber, printContent);
+    saveInvoicePDF(createdInvoice.invoiceNumber, htmlContent);
 
     // True silent printing
     const iframe = document.createElement('iframe');
@@ -524,7 +676,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     const iframeDoc = iframe.contentWindow?.document;
     if (iframeDoc) {
       iframeDoc.open();
-      iframeDoc.write(printContent);
+      iframeDoc.write(htmlContent);
       iframeDoc.close();
 
       setTimeout(() => {
@@ -548,6 +700,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
 
   if (viewMode === 'view' && createdInvoice) {
     const { subtotal, tax, total } = calculateTotals();
+    const currentStoreInfo = getCurrentStoreSettings(); // Always use current settings
     const upiQRUrl = generateUPIQR(total);
     
     return (
@@ -571,10 +724,10 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
 
           <Card className="shadow-xl border-0 bg-gradient-to-br from-white to-purple-50">
             <CardHeader className="text-center bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-t-lg">
-              <CardTitle className="text-3xl">{storeInfo.name}</CardTitle>
-              <p className="text-purple-100">{storeInfo.address}</p>
-              <p className="text-sm text-purple-200">Phone: {storeInfo.phone} | Email: {storeInfo.email}</p>
-              <p className="text-sm text-purple-200">GST No: {storeInfo.taxId}</p>
+              <CardTitle className="text-3xl">{currentStoreInfo.name}</CardTitle>
+              <p className="text-purple-100">{currentStoreInfo.address}</p>
+              <p className="text-sm text-purple-200">Phone: {currentStoreInfo.phone} | Email: {currentStoreInfo.email}</p>
+              <p className="text-sm text-purple-200">GST No: {currentStoreInfo.taxId}</p>
             </CardHeader>
             <CardContent className="p-8">
               <div className="space-y-6">
@@ -609,7 +762,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                         {items.map((item, index) => (
                           <tr key={item.id} className={index % 2 === 0 ? "bg-purple-25" : "bg-white"}>
                             <td className="p-3">
-                              {item.finalName || `${item.productName}${item.colorCode ? ` - ${item.colorCode}` : ''}${item.volume ? ` - ${item.volume}` : ''}`}
+                              {`${item.productName}${item.colorCode ? ` - ${item.colorCode}` : ''}${item.volume ? ` - ${item.volume}` : ''}`}
                             </td>
                             <td className="p-3 font-medium">{item.quantity}</td>
                             <td className="p-3 font-medium">₹{item.rate.toFixed(2)}</td>
@@ -840,16 +993,6 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                       value={item.volume}
                       onChange={(e) => updateItem(item.id, 'volume', e.target.value)}
                       placeholder="Volume"
-                      className="border-green-200 focus:ring-green-500"
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label className="text-green-700 font-medium">Final Name (Optional)</Label>
-                    <Input
-                      value={item.finalName}
-                      onChange={(e) => updateItem(item.id, 'finalName', e.target.value)}
-                      placeholder="Custom item name"
                       className="border-green-200 focus:ring-green-500"
                     />
                   </div>

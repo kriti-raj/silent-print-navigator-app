@@ -33,10 +33,10 @@ interface Invoice {
     id: string;
     productName: string;
     colorCode: string;
-    finalName: string;
     quantity: number;
     rate: number;
     total: number;
+    volume?: string;
   }>;
   subtotal: number;
   tax: number;
@@ -59,6 +59,21 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
   const [activeTab, setActiveTab] = useState('all');
   const [showTodayOnly, setShowTodayOnly] = useState(true);
   const { toast } = useToast();
+
+  // Function to get current store settings
+  const getCurrentStoreSettings = () => {
+    const storeSettings = JSON.parse(localStorage.getItem('storeSettings') || '{}');
+    return {
+      name: storeSettings.businessName || 'Your Business Name',
+      address: storeSettings.address || 'Your Business Address',
+      phone: storeSettings.phone || '+91 00000 00000',
+      email: storeSettings.email || 'your@email.com',
+      taxId: storeSettings.gstNumber || 'GST000000000',
+      website: storeSettings.website || 'www.yourbusiness.com',
+      logo: storeSettings.logo || '',
+      paymentQR: storeSettings.paymentQR || ''
+    };
+  };
 
   useEffect(() => {
     const savedInvoices = localStorage.getItem('invoices');
@@ -101,38 +116,27 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
   };
 
   const normalizeInvoice = (invoice: any): Invoice => {
-    const storeSettings = JSON.parse(localStorage.getItem('storeSettings') || '{}');
-    
-    const defaultStoreInfo = {
-      name: storeSettings.businessName || 'Your Business Name',
-      address: storeSettings.address || 'Your Business Address',
-      phone: storeSettings.phone || '+91 00000 00000',
-      email: storeSettings.email || 'your@email.com',
-      taxId: storeSettings.gstNumber || 'GST000000000',
-      website: storeSettings.website || 'www.yourbusiness.com',
-      logo: storeSettings.logo || '',
-      paymentQR: storeSettings.paymentQR || ''
-    };
+    const currentStoreInfo = getCurrentStoreSettings();
     
     return {
       id: invoice.id || '',
       invoiceNumber: invoice.invoiceNumber || '',
       customerDetails: {
-        name: invoice.customerDetails?.name || invoice.customer?.name || '',
-        phone: invoice.customerDetails?.phone || invoice.customer?.phone || '',
-        address: invoice.customerDetails?.address || invoice.customer?.address || '',
-        email: invoice.customerDetails?.email || invoice.customer?.email || ''
+        name: invoice.customerDetails?.name || '',
+        phone: invoice.customerDetails?.phone || '',
+        address: invoice.customerDetails?.address || '',
+        email: invoice.customerDetails?.email || ''
       },
-      storeInfo: invoice.storeInfo || defaultStoreInfo,
+      storeInfo: currentStoreInfo, // Always use current store settings
       date: invoice.date || new Date().toISOString(),
       items: (invoice.items || []).map((item: any) => ({
         id: item.id || '',
         productName: item.productName || '',
         colorCode: item.colorCode || '',
-        finalName: item.finalName || '',
         quantity: Number(item.quantity) || 0,
         rate: Number(item.rate) || 0,
-        total: Number(item.total) || 0
+        total: Number(item.total) || 0,
+        volume: item.volume || ''
       })),
       subtotal: Number(invoice.subtotal) || 0,
       tax: Number(invoice.tax) || 0,
@@ -171,11 +175,11 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
     }
   };
 
-  const generateUPIQR = (amount: number, storeInfo: any) => {
-    const storeSettings = JSON.parse(localStorage.getItem('storeSettings') || '{}');
+  const generateUPIQR = (amount: number) => {
+    const currentStoreSettings = getCurrentStoreSettings();
     
-    if (storeSettings.paymentQR) {
-      return storeSettings.paymentQR;
+    if (currentStoreSettings.paymentQR) {
+      return currentStoreSettings.paymentQR;
     }
     
     const upiSettings = JSON.parse(localStorage.getItem('upiSettings') || '{}');
@@ -185,206 +189,366 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
     return generateQRCodeDataURL(finalUpiString, 150);
   };
 
-  const handlePrint = async (invoice: Invoice) => {
-    try {
-      console.log('Printing invoice:', invoice.invoiceNumber);
-      
-      const normalizedInvoice = normalizeInvoice(invoice);
-      const upiQRUrl = generateUPIQR(normalizedInvoice.total, normalizedInvoice.storeInfo);
-      
-      const printerSettings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
-      const paperSize = printerSettings.paperSize || 'A4';
-      const margins = printerSettings.margins || 10;
+  const generateInvoiceHTML = (invoice: Invoice, currentStoreInfo: any, upiQRUrl: string) => {
+    const printerSettings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
+    const paperSize = printerSettings.paperSize || 'A4';
+    const margins = printerSettings.margins || 10;
 
-      const currentStoreSettings = JSON.parse(localStorage.getItem('storeSettings') || '{}');
-      const printStoreInfo = {
-        name: currentStoreSettings.businessName || normalizedInvoice.storeInfo.name,
-        address: currentStoreSettings.address || normalizedInvoice.storeInfo.address,
-        phone: currentStoreSettings.phone || normalizedInvoice.storeInfo.phone,
-        email: currentStoreSettings.email || normalizedInvoice.storeInfo.email,
-        taxId: currentStoreSettings.gstNumber || normalizedInvoice.storeInfo.taxId,
-        website: currentStoreSettings.website || normalizedInvoice.storeInfo.website,
-        logo: currentStoreSettings.logo || normalizedInvoice.storeInfo.logo
-      };
-
-      const printContent = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Invoice ${normalizedInvoice.invoiceNumber}</title>
-            <style>
-              @media print { @page { margin: ${margins}mm; } }
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Invoice ${invoice.invoiceNumber}</title>
+          <style>
+            @media print { 
+              @page { 
+                margin: ${margins}mm; 
+                size: ${paperSize};
+              }
               body { 
-                font-family: Arial, sans-serif; 
-                margin: 0; 
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+            }
+            * {
+              box-sizing: border-box;
+            }
+            body { 
+              font-family: 'Arial', sans-serif; 
+              margin: 0; 
+              padding: 20px;
+              font-size: ${paperSize === 'A5' ? '11px' : '13px'};
+              line-height: 1.4;
+              color: #333;
+              background: #f8f9fa;
+            }
+            .invoice-container {
+              max-width: 800px;
+              margin: 0 auto;
+              background: white;
+              box-shadow: 0 0 20px rgba(0,0,0,0.1);
+              border-radius: 8px;
+              overflow: hidden;
+            }
+            .header { 
+              text-align: center; 
+              padding: 25px;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+            }
+            .store-logo { 
+              height: 60px; 
+              margin-bottom: 15px; 
+              border-radius: 8px;
+            }
+            .store-name {
+              font-size: 28px;
+              font-weight: bold;
+              margin: 10px 0;
+              text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            }
+            .store-details {
+              font-size: 14px;
+              margin: 5px 0;
+              opacity: 0.9;
+            }
+            .invoice-details { 
+              display: flex; 
+              justify-content: space-between;
+              padding: 25px;
+              background: #f8f9fa;
+              border-bottom: 2px solid #e9ecef;
+            }
+            .invoice-info, .customer-info {
+              flex: 1;
+            }
+            .invoice-info {
+              text-align: left;
+            }
+            .customer-info {
+              text-align: right;
+              padding-left: 20px;
+            }
+            .section-title {
+              font-size: 16px;
+              font-weight: bold;
+              color: #667eea;
+              margin-bottom: 10px;
+              border-bottom: 2px solid #667eea;
+              padding-bottom: 5px;
+            }
+            .info-line {
+              margin: 8px 0;
+              display: flex;
+              align-items: center;
+            }
+            .info-label {
+              font-weight: bold;
+              margin-right: 8px;
+              color: #495057;
+            }
+            .status-badge {
+              background: #e7f3ff;
+              color: #0066cc;
+              padding: 4px 12px;
+              border-radius: 20px;
+              font-size: 12px;
+              font-weight: bold;
+              text-transform: uppercase;
+            }
+            .items-section {
+              padding: 25px;
+            }
+            .items-table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin-top: 15px;
+              border-radius: 8px;
+              overflow: hidden;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
+            .items-table th {
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+              padding: 15px 12px;
+              text-align: left;
+              font-weight: bold;
+              font-size: 14px;
+            }
+            .items-table td { 
+              padding: 12px; 
+              border-bottom: 1px solid #e9ecef;
+              vertical-align: top;
+            }
+            .items-table tr:nth-child(even) { 
+              background-color: #f8f9fa; 
+            }
+            .items-table tr:hover {
+              background-color: #e3f2fd;
+            }
+            .item-name {
+              font-weight: 600;
+              color: #333;
+            }
+            .item-total {
+              font-weight: bold;
+              color: #667eea;
+              font-size: 15px;
+            }
+            .footer-section { 
+              display: flex; 
+              justify-content: space-between; 
+              align-items: flex-start; 
+              padding: 25px;
+              background: #f8f9fa;
+            }
+            .qr-section { 
+              text-align: center; 
+              padding: 20px;
+              background: white;
+              border: 2px dashed #667eea;
+              border-radius: 12px;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
+            .qr-title {
+              font-weight: bold;
+              color: #667eea;
+              margin-bottom: 10px;
+              font-size: 14px;
+            }
+            .qr-section img { 
+              width: 120px; 
+              height: 120px; 
+              border: 2px solid #667eea;
+              border-radius: 8px;
+            }
+            .qr-amount {
+              margin-top: 8px;
+              font-size: 12px;
+              color: #666;
+              font-weight: 500;
+            }
+            .totals { 
+              background: white;
+              padding: 20px;
+              border-radius: 8px;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+              min-width: 280px;
+            }
+            .total-row { 
+              display: flex; 
+              justify-content: space-between; 
+              margin: 10px 0; 
+              padding: 8px 0; 
+              border-bottom: 1px solid #e9ecef;
+              font-size: 14px;
+            }
+            .total-label {
+              color: #495057;
+              font-weight: 500;
+            }
+            .total-value {
+              font-weight: bold;
+              color: #333;
+            }
+            .final-total { 
+              border-top: 3px solid #667eea !important;
+              border-bottom: none !important;
+              padding-top: 15px !important;
+              margin-top: 10px;
+              font-size: 18px;
+            }
+            .final-total .total-label {
+              color: #667eea;
+              font-weight: bold;
+            }
+            .final-total .total-value {
+              color: #667eea;
+              font-size: 20px;
+            }
+            .notes-section {
+              padding: 25px;
+              background: #fff8e1;
+              border-left: 4px solid #ffc107;
+              margin: 20px 25px;
+              border-radius: 0 8px 8px 0;
+            }
+            .notes-title {
+              font-weight: bold;
+              color: #f57c00;
+              margin-bottom: 8px;
+            }
+            .notes-content {
+              color: #5d4037;
+              line-height: 1.5;
+            }
+            .footer-text {
+              text-align: center;
+              padding: 20px;
+              color: #666;
+              font-size: 12px;
+              border-top: 1px solid #e9ecef;
+            }
+            @media print {
+              .invoice-container {
+                box-shadow: none;
+                border-radius: 0;
+              }
+              body {
+                background: white;
                 padding: 0;
-                font-size: ${paperSize === 'A5' ? '12px' : '14px'};
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: #333;
               }
-              .header { 
-                text-align: center; 
-                margin-bottom: 20px; 
-                border-bottom: 3px solid #667eea; 
-                padding-bottom: 15px;
-                background: white;
-                border-radius: 10px;
-                padding: 20px;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-              }
-              .invoice-details { 
-                margin-bottom: 20px; 
-                display: flex; 
-                justify-content: space-between;
-                background: white;
-                padding: 15px;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-              }
-              .items-table { 
-                width: 100%; 
-                border-collapse: collapse; 
-                margin-bottom: 20px;
-                background: white;
-                border-radius: 8px;
-                overflow: hidden;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-              }
-              .items-table th, .items-table td { 
-                border: 1px solid #e1e5e9; 
-                padding: 12px 8px; 
-                text-align: left; 
-              }
-              .items-table th { 
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                font-weight: bold; 
-              }
-              .items-table tr:nth-child(even) { background-color: #f8f9fa; }
-              .footer-section { 
-                display: flex; 
-                justify-content: space-between; 
-                align-items: flex-start; 
-                margin-top: 20px;
-                background: white;
-                padding: 20px;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-              }
-              .qr-section { 
-                text-align: center; 
-                flex: 0 0 150px;
-                padding: 10px;
-                border: 2px dashed #667eea;
-                border-radius: 8px;
-              }
-              .qr-section img { width: 100px; height: 100px; }
-              .totals { 
-                flex: 0 0 300px; 
-                text-align: right;
-                padding: 10px;
-              }
-              .total-row { 
-                display: flex; 
-                justify-content: space-between; 
-                margin: 8px 0; 
-                padding: 5px 0; 
-                border-bottom: 1px solid #eee;
-              }
-              .final-total { 
-                font-weight: bold; 
-                font-size: 1.3em; 
-                border-top: 3px solid #667eea; 
-                padding-top: 10px;
-                color: #667eea;
-              }
-              .store-logo { height: 50px; margin-bottom: 10px; }
-              .notes-section {
-                background: #f8f9fa;
-                padding: 15px;
-                border-radius: 8px;
-                margin-top: 15px;
-                border-left: 4px solid #667eea;
-              }
-            </style>
-          </head>
-          <body>
+            }
+          </style>
+        </head>
+        <body>
+          <div class="invoice-container">
             <div class="header">
-              ${printStoreInfo.logo ? `<img src="${printStoreInfo.logo}" alt="Store Logo" class="store-logo">` : ''}
-              <h1 style="color: #667eea; margin: 10px 0;">${printStoreInfo.name}</h1>
-              <p style="margin: 5px 0;">${printStoreInfo.address}</p>
-              <p style="margin: 5px 0;">Phone: ${printStoreInfo.phone} | Email: ${printStoreInfo.email}</p>
-              <p style="margin: 5px 0; font-weight: bold;">GST No: ${printStoreInfo.taxId}</p>
+              ${currentStoreInfo.logo ? `<img src="${currentStoreInfo.logo}" alt="Store Logo" class="store-logo">` : ''}
+              <div class="store-name">${currentStoreInfo.name}</div>
+              <div class="store-details">${currentStoreInfo.address}</div>
+              <div class="store-details">Phone: ${currentStoreInfo.phone} | Email: ${currentStoreInfo.email}</div>
+              <div class="store-details">GST No: ${currentStoreInfo.taxId}</div>
             </div>
             
             <div class="invoice-details">
-              <div>
-                <h2 style="color: #667eea; margin-bottom: 10px;">Invoice #${normalizedInvoice.invoiceNumber}</h2>
-                <p style="margin: 5px 0;"><strong>Date:</strong> ${new Date(normalizedInvoice.date).toLocaleDateString()}</p>
-                <p style="margin: 5px 0;"><strong>Status:</strong> <span style="background: #e7f3ff; padding: 2px 8px; border-radius: 4px; color: #0066cc;">${normalizedInvoice.status}</span></p>
+              <div class="invoice-info">
+                <div class="section-title">Invoice Details</div>
+                <div class="info-line"><span class="info-label">Invoice #:</span> ${invoice.invoiceNumber}</div>
+                <div class="info-line"><span class="info-label">Date:</span> ${new Date(invoice.date).toLocaleDateString()}</div>
+                <div class="info-line"><span class="info-label">Status:</span> <span class="status-badge">${invoice.status}</span></div>
               </div>
-              <div style="text-align: right;">
-                <p style="margin: 5px 0;"><strong>Customer:</strong> ${normalizedInvoice.customerDetails.name}</p>
-                <p style="margin: 5px 0;"><strong>Phone:</strong> ${normalizedInvoice.customerDetails.phone}</p>
-                <p style="margin: 5px 0;"><strong>Address:</strong> ${normalizedInvoice.customerDetails.address}</p>
-                ${normalizedInvoice.customerDetails.email ? `<p style="margin: 5px 0;"><strong>Email:</strong> ${normalizedInvoice.customerDetails.email}</p>` : ''}
+              <div class="customer-info">
+                <div class="section-title">Customer Details</div>
+                <div class="info-line"><span class="info-label">Name:</span> ${invoice.customerDetails.name}</div>
+                <div class="info-line"><span class="info-label">Phone:</span> ${invoice.customerDetails.phone}</div>
+                <div class="info-line"><span class="info-label">Address:</span> ${invoice.customerDetails.address}</div>
+                ${invoice.customerDetails.email ? `<div class="info-line"><span class="info-label">Email:</span> ${invoice.customerDetails.email}</div>` : ''}
               </div>
             </div>
             
-            <table class="items-table">
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Qty</th>
-                  <th>Rate</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${normalizedInvoice.items.map(item => `
+            <div class="items-section">
+              <div class="section-title">Items</div>
+              <table class="items-table">
+                <thead>
                   <tr>
-                    <td>${item.finalName || `${item.productName}${item.colorCode ? ` - ${item.colorCode}` : ''}`}</td>
-                    <td>${item.quantity}</td>
-                    <td>₹${item.rate.toFixed(2)}</td>
-                    <td><strong>₹${item.total.toFixed(2)}</strong></td>
+                    <th>Item Description</th>
+                    <th style="width: 80px;">Qty</th>
+                    <th style="width: 100px;">Rate</th>
+                    <th style="width: 120px;">Total</th>
                   </tr>
-                `).join('')}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  ${invoice.items.map(item => `
+                    <tr>
+                      <td class="item-name">
+                        ${item.productName}${item.colorCode ? ` - ${item.colorCode}` : ''}${item.volume ? ` - ${item.volume}` : ''}
+                      </td>
+                      <td style="text-align: center; font-weight: 600;">${item.quantity}</td>
+                      <td style="text-align: right; font-weight: 600;">₹${item.rate.toFixed(2)}</td>
+                      <td class="item-total" style="text-align: right;">₹${item.total.toFixed(2)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
             
             <div class="footer-section">
               ${upiQRUrl ? `
                 <div class="qr-section">
-                  <p style="margin: 5px 0; font-weight: bold; color: #667eea;">Payment QR</p>
+                  <div class="qr-title">Payment QR Code</div>
                   <img src="${upiQRUrl}" alt="Payment QR" />
-                  <p style="margin: 5px 0; font-size: 10px;">Scan to pay ₹${normalizedInvoice.total.toFixed(2)}</p>
+                  <div class="qr-amount">Scan to pay ₹${invoice.total.toFixed(2)}</div>
                 </div>
               ` : '<div></div>'}
               
               <div class="totals">
                 <div class="total-row">
-                  <span>Subtotal:</span>
-                  <span><strong>₹${normalizedInvoice.subtotal.toFixed(2)}</strong></span>
+                  <span class="total-label">Subtotal:</span>
+                  <span class="total-value">₹${invoice.subtotal.toFixed(2)}</span>
                 </div>
-                ${normalizedInvoice.gstEnabled ? `
+                ${invoice.gstEnabled ? `
                   <div class="total-row">
-                    <span>GST (18%):</span>
-                    <span><strong>₹${normalizedInvoice.tax.toFixed(2)}</strong></span>
+                    <span class="total-label">GST (18%):</span>
+                    <span class="total-value">₹${invoice.tax.toFixed(2)}</span>
                   </div>
                 ` : ''}
                 <div class="total-row final-total">
-                  <span>Total:</span>
-                  <span>₹${normalizedInvoice.total.toFixed(2)}</span>
+                  <span class="total-label">Total:</span>
+                  <span class="total-value">₹${invoice.total.toFixed(2)}</span>
                 </div>
               </div>
             </div>
             
-            ${normalizedInvoice.notes ? `<div class="notes-section"><strong>Notes:</strong> ${normalizedInvoice.notes}</div>` : ''}
-          </body>
-        </html>
-      `;
+            ${invoice.notes ? `
+              <div class="notes-section">
+                <div class="notes-title">Notes:</div>
+                <div class="notes-content">${invoice.notes}</div>
+              </div>
+            ` : ''}
+            
+            <div class="footer-text">
+              Thank you for your business!
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+  };
 
-      await saveInvoicePDF(normalizedInvoice.invoiceNumber, printContent);
+  const handlePrint = async (invoice: Invoice) => {
+    try {
+      console.log('Printing invoice:', invoice.invoiceNumber);
+      
+      const normalizedInvoice = normalizeInvoice(invoice);
+      const currentStoreInfo = getCurrentStoreSettings(); // Always use current settings
+      const upiQRUrl = generateUPIQR(normalizedInvoice.total);
+
+      // Generate the exact same HTML for both printing and saving
+      const htmlContent = generateInvoiceHTML(normalizedInvoice, currentStoreInfo, upiQRUrl);
+
+      // Save invoice PDF with same content as printed
+      await saveInvoicePDF(normalizedInvoice.invoiceNumber, htmlContent);
 
       const iframe = document.createElement('iframe');
       iframe.style.position = 'absolute';
@@ -397,7 +561,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
       const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
       if (iframeDoc) {
         iframeDoc.open();
-        iframeDoc.write(printContent);
+        iframeDoc.write(htmlContent);
         iframeDoc.close();
         
         setTimeout(() => {
@@ -407,6 +571,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
           }, 1000);
         }, 500);
         
+        const printerSettings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
         if (printerSettings.autoMarkAsPrinted && normalizedInvoice.status === 'draft') {
           updateInvoiceStatus(normalizedInvoice.id, 'sent');
         }
@@ -638,7 +803,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
                       {selectedInvoice.items.map((item, index) => (
                         <tr key={item.id || index} className={index % 2 === 0 ? "bg-purple-25" : "bg-white"}>
                           <td className="p-3">
-                            {item.finalName || `${item.productName}${item.colorCode ? ` - ${item.colorCode}` : ''}`}
+                            {`${item.productName}${item.colorCode ? ` - ${item.colorCode}` : ''}${item.volume ? ` - ${item.volume}` : ''}`}
                           </td>
                           <td className="p-3 font-medium">{item.quantity}</td>
                           <td className="p-3 font-medium">₹{item.rate.toFixed(2)}</td>
