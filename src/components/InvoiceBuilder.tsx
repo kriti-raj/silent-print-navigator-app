@@ -57,13 +57,12 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   const [total, setTotal] = useState<number>(0);
   const [notes, setNotes] = useState<string>('');
   const [watermarkId, setWatermarkId] = useState<string>('');
-  const [gstEnabled, setGstEnabled] = useState<boolean>(true);
-  const [printFormat, setPrintFormat] = useState<'a4' | 'thermal'>('a4');
+  const [gstEnabled, setGstEnabled] = useState<boolean>(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const { toast } = useToast();
 
-  const getCurrentStoreSettings = (): { name: string; address: string; phone: string; email: string; taxId: string; website: string; logo?: string; paymentQR?: string; } => {
+  const getCurrentStoreSettings = (): { name: string; address: string; phone: string; email: string; taxId: string; website: string; logo?: string; paymentQR?: string; printFormat?: 'a4' | 'thermal'; } => {
     const storeInfo = localStorage.getItem('storeInfo');
     let storeSettings = {};
     if (storeInfo) {
@@ -81,7 +80,8 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       taxId: (storeSettings as any).gstNumber || (storeSettings as any).taxId || 'GST000000000',
       website: (storeSettings as any).website || 'www.yourbusiness.com',
       logo: (storeSettings as any).logo || '',
-      paymentQR: (storeSettings as any).paymentQR || ''
+      paymentQR: (storeSettings as any).paymentQR || '',
+      printFormat: (storeSettings as any).printFormat || 'a4'
     };
     return finalSettings;
   };
@@ -103,7 +103,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     setTotal(0);
     setNotes('');
     setWatermarkId('');
-    setGstEnabled(true);
+    setGstEnabled(false);
   }, []);
 
   useEffect(() => {
@@ -148,6 +148,26 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     }
 
     localStorage.setItem('invoices', JSON.stringify(savedInvoices));
+
+    // Update customer's invoice list
+    if (customerDetails.name && customerDetails.phone) {
+      const savedCustomers = JSON.parse(localStorage.getItem('customers') || '[]');
+      const customerIndex = savedCustomers.findIndex((c: Customer) => 
+        c.phone === customerDetails.phone || c.name.toLowerCase() === customerDetails.name.toLowerCase()
+      );
+      
+      if (customerIndex !== -1) {
+        if (!savedCustomers[customerIndex].invoices) {
+          savedCustomers[customerIndex].invoices = [];
+        }
+        const invoiceExists = savedCustomers[customerIndex].invoices.some((invId: string) => invId === invoiceId);
+        if (!invoiceExists) {
+          savedCustomers[customerIndex].invoices.push(invoiceId);
+          localStorage.setItem('customers', JSON.stringify(savedCustomers));
+        }
+      }
+    }
+
     console.log('Invoice saved successfully:', invoiceToSave);
     
     toast({
@@ -194,17 +214,21 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     setItems(items.filter(item => item.id !== id));
   };
 
-  const addProductToInvoice = (product: Product) => {
-    const newItem: InvoiceItem = {
-      id: Date.now().toString(),
-      productName: product.name,
-      colorCode: product.colorCode || '',
-      quantity: 1,
-      rate: product.basePrice || 0,
-      total: product.basePrice || 0,
-      volume: product.volume || ''
-    };
-    setItems([...items, newItem]);
+  const addProductToInvoice = (product: Product, itemId: string) => {
+    setItems(items.map(item => {
+      if (item.id === itemId) {
+        const updatedItem = {
+          ...item,
+          productName: product.name,
+          colorCode: product.colorCode || '',
+          rate: product.basePrice || 0,
+          volume: product.volume || '',
+          total: item.quantity * (product.basePrice || 0)
+        };
+        return updatedItem;
+      }
+      return item;
+    }));
   };
 
   const selectCustomer = (customerId: string) => {
@@ -450,7 +474,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       const currentStoreInfo = getCurrentStoreSettings();
       const upiQRUrl = generateUPIQR(total);
 
-      const htmlContent = printFormat === 'thermal' 
+      const htmlContent = currentStoreInfo.printFormat === 'thermal' 
         ? generateThermalInvoiceHTML(savedInvoice, currentStoreInfo, upiQRUrl)
         : generateA4InvoiceHTML(savedInvoice, currentStoreInfo, upiQRUrl);
 
@@ -526,18 +550,6 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                     required
                   />
                 </div>
-                <div>
-                  <Label htmlFor="printFormat">Print Format</Label>
-                  <Select value={printFormat} onValueChange={(value: 'a4' | 'thermal') => setPrintFormat(value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="a4">A4 Format</SelectItem>
-                      <SelectItem value="thermal">Thermal Printer (80mm)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
 
               <div className="space-y-4">
@@ -601,7 +613,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                   <div className="col-span-3">
                     <Select onValueChange={(productId) => {
                       const product = products.find(p => p.id === productId);
-                      if (product) addProductToInvoice(product);
+                      if (product) addProductToInvoice(product, item.id);
                     }}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select product" />
