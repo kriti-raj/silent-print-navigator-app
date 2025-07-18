@@ -97,7 +97,19 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     setInvoiceNumber(`INV-${new Date().getFullYear()}-${Date.now()}`);
     setCustomerDetails({ name: '', phone: '', address: '', email: '' });
     setInvoiceDate(new Date().toISOString().slice(0, 10));
-    setItems([]);
+    
+    // Start with one empty item
+    const initialItem: InvoiceItem = {
+      id: Date.now().toString(),
+      productName: '',
+      colorCode: '',
+      quantity: 1,
+      rate: 0,
+      total: 0,
+      volume: ''
+    };
+    setItems([initialItem]);
+    
     setSubtotal(0);
     setTax(0);
     setTotal(0);
@@ -211,24 +223,29 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   };
 
   const removeItem = (id: string) => {
-    setItems(items.filter(item => item.id !== id));
+    if (items.length > 1) {
+      setItems(items.filter(item => item.id !== id));
+    }
   };
 
-  const addProductToInvoice = (product: Product, itemId: string) => {
-    setItems(items.map(item => {
-      if (item.id === itemId) {
-        const updatedItem = {
-          ...item,
-          productName: product.name,
-          colorCode: product.colorCode || '',
-          rate: product.basePrice || 0,
-          volume: product.volume || '',
-          total: item.quantity * (product.basePrice || 0)
-        };
-        return updatedItem;
-      }
-      return item;
-    }));
+  const selectProduct = (productId: string, itemId: string) => {
+    const product = products.find(p => p.id === productId);
+    if (product) {
+      setItems(items.map(item => {
+        if (item.id === itemId) {
+          const updatedItem = {
+            ...item,
+            productName: product.name,
+            colorCode: product.colorCode || '',
+            rate: product.basePrice || 0,
+            volume: product.volume || '',
+            total: item.quantity * (product.basePrice || 0)
+          };
+          return updatedItem;
+        }
+        return item;
+      }));
+    }
   };
 
   const selectCustomer = (customerId: string) => {
@@ -411,8 +428,8 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
             <thead>
               <tr>
                 <th>Product</th>
-                <th>Color Code</th>
-                <th>Volume</th>
+                ${invoice.items.some((item: InvoiceItem) => item.colorCode) ? '<th>Color Code</th>' : ''}
+                ${invoice.items.some((item: InvoiceItem) => item.volume) ? '<th>Volume</th>' : ''}
                 <th>Quantity</th>
                 <th>Rate</th>
                 <th>Total</th>
@@ -422,8 +439,8 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
               ${invoice.items.map((item: InvoiceItem) => `
                 <tr>
                   <td>${item.productName}</td>
-                  <td>${item.colorCode || '-'}</td>
-                  <td>${item.volume || '-'}</td>
+                  ${invoice.items.some((item: InvoiceItem) => item.colorCode) ? `<td>${item.colorCode || '-'}</td>` : ''}
+                  ${invoice.items.some((item: InvoiceItem) => item.volume) ? `<td>${item.volume || '-'}</td>` : ''}
                   <td>${item.quantity}</td>
                   <td>₹${item.rate.toFixed(2)}</td>
                   <td>₹${item.total.toFixed(2)}</td>
@@ -610,11 +627,8 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
               
               {items.map((item, index) => (
                 <div key={item.id} className="grid grid-cols-12 gap-2 items-center p-4 border rounded-lg">
-                  <div className="col-span-3">
-                    <Select onValueChange={(productId) => {
-                      const product = products.find(p => p.id === productId);
-                      if (product) addProductToInvoice(product, item.id);
-                    }}>
+                  <div className="col-span-4">
+                    <Select onValueChange={(productId) => selectProduct(productId, item.id)}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select product" />
                       </SelectTrigger>
@@ -673,7 +687,13 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                     <span className="font-semibold">₹{item.total.toFixed(2)}</span>
                   </div>
                   <div className="col-span-1">
-                    <Button type="button" variant="ghost" size="sm" onClick={() => removeItem(item.id)}>
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => removeItem(item.id)}
+                      disabled={items.length === 1}
+                    >
                       <Trash2 className="h-4 w-4 text-red-600" />
                     </Button>
                   </div>
