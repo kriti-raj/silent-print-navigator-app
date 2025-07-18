@@ -161,7 +161,7 @@ const Index = () => {
                   <Button 
                     variant="outline"
                     className="w-full border-blue-200 hover:bg-blue-50 text-blue-600"
-                    onClick={() => document.querySelector('[data-state="active"][value="customers"]')?.click()}
+                    onClick={() => (document.querySelector('[data-state="active"][value="customers"]') as HTMLElement)?.click()}
                   >
                     <Users className="mr-2 h-4 w-4" />
                     Add Customer
@@ -169,7 +169,7 @@ const Index = () => {
                   <Button 
                     variant="outline"
                     className="w-full border-purple-200 hover:bg-purple-50 text-purple-600"
-                    onClick={() => document.querySelector('[data-state="active"][value="products"]')?.click()}
+                    onClick={() => (document.querySelector('[data-state="active"][value="products"]') as HTMLElement)?.click()}
                   >
                     <Package className="mr-2 h-4 w-4" />
                     Add Product
