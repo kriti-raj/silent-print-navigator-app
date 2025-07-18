@@ -41,7 +41,7 @@ interface Invoice {
   subtotal: number;
   tax: number;
   total: number;
-  status: 'paid' | 'pending' | 'overdue';
+  status: 'paid' | 'unpaid' | 'overdue';
   notes: string;
   watermarkId: string;
   gstEnabled: boolean;
@@ -56,7 +56,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'today' | 'paid' | 'pending' | 'overdue'>('today');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'today' | 'paid' | 'unpaid' | 'overdue'>('today');
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   const { toast } = useToast();
 
@@ -398,7 +398,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'paid': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'unpaid': return 'bg-yellow-100 text-yellow-800';
       case 'overdue': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -460,8 +460,8 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-orange-100">Pending Invoices</p>
-                <p className="text-2xl font-bold">{invoices.filter(inv => inv.status === 'pending').length}</p>
+                <p className="text-sm text-orange-100">Unpaid Invoices</p>
+                <p className="text-2xl font-bold">{invoices.filter(inv => inv.status === 'unpaid').length}</p>
               </div>
               <FileText className="h-8 w-8 text-orange-200" />
             </div>
@@ -504,11 +504,11 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
             Paid
           </Button>
           <Button
-            variant={filterStatus === 'pending' ? 'default' : 'outline'}
-            onClick={() => setFilterStatus('pending')}
+            variant={filterStatus === 'unpaid' ? 'default' : 'outline'}
+            onClick={() => setFilterStatus('unpaid')}
             size="sm"
           >
-            Pending
+            Unpaid
           </Button>
         </div>
       </div>

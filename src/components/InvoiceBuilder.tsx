@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -319,7 +318,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
             .totals div { margin: 5px 0; }
             .total-final { font-size: 16px; font-weight: bold; border-top: 2px solid #333; padding-top: 10px; }
             .qr { text-align: center; margin: 20px 0; }
-            .qr img { width: 150px; height: 150px; }
+            .qr img { width: 120px; height: 120px; }
             .notes { margin-top: 20px; padding: 15px; background-color: #f9f9f9; border-left: 4px solid #333; }
             .footer { text-align: center; margin-top: 40px; font-size: 10px; color: #666; }
           </style>
@@ -373,18 +372,20 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
             </tbody>
           </table>
 
-          <div class="totals">
-            <div>Subtotal: ₹${invoice.subtotal.toFixed(2)}</div>
-            ${invoice.gstEnabled ? `<div>GST (18%): ₹${invoice.tax.toFixed(2)}</div>` : ''}
-            <div class="total-final">Total Amount: ₹${invoice.total.toFixed(2)}</div>
-          </div>
-
-          ${upiQRUrl && includePaymentQR ? `
-            <div class="qr">
-              <h3>Scan to Pay</h3>
-              <img src="${upiQRUrl}" alt="UPI QR Code" />
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div class="totals" style="flex: 1;">
+              <div>Subtotal: ₹${invoice.subtotal.toFixed(2)}</div>
+              ${invoice.gstEnabled ? `<div>GST (18%): ₹${invoice.tax.toFixed(2)}</div>` : ''}
+              <div class="total-final">Total Amount: ₹${invoice.total.toFixed(2)}</div>
             </div>
-          ` : ''}
+            
+            ${upiQRUrl && includePaymentQR ? `
+              <div class="qr" style="flex: 0 0 140px; margin-left: 20px;">
+                <h4 style="margin: 0 0 10px 0;">Scan to Pay</h4>
+                <img src="${upiQRUrl}" alt="UPI QR Code" />
+              </div>
+            ` : ''}
+          </div>
 
           ${invoice.notes ? `
             <div class="notes">
@@ -429,7 +430,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
             }
             .right { text-align: right; }
             .qr { text-align: center; margin: 5px 0; }
-            .qr img { width: 40mm; height: 40mm; }
+            .qr img { width: 35mm; height: 35mm; }
           </style>
         </head>
         <body>
@@ -751,33 +752,34 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
+                  <div className="md:col-span-2">
                     <Label className="text-green-600">Product</Label>
-                    <Select onValueChange={(productId) => selectProduct(productId, item.id)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select product" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.map((product) => (
-                          <SelectItem key={product.id} value={product.id}>
-                            {product.name} - ₹{product.basePrice}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      placeholder="Type product name"
-                      value={item.productName}
-                      onChange={(e) => updateItem(item.id, 'productName', e.target.value)}
-                      className="mt-2"
-                      required
-                    />
+                    <div className="space-y-2">
+                      <Select onValueChange={(productId) => selectProduct(productId, item.id)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select product" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {products.map((product) => (
+                            <SelectItem key={product.id} value={product.id}>
+                              {product.name} - ₹{product.basePrice}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        placeholder="Or type product name manually"
+                        value={item.productName}
+                        onChange={(e) => updateItem(item.id, 'productName', e.target.value)}
+                        required
+                      />
+                    </div>
                   </div>
                   
                   <div>
-                    <Label className="text-green-600">Color</Label>
+                    <Label className="text-green-600">Color Code</Label>
                     <Input
-                      placeholder="Color"
+                      placeholder="Color code (optional)"
                       value={item.colorCode}
                       onChange={(e) => updateItem(item.id, 'colorCode', e.target.value)}
                     />
@@ -786,7 +788,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                   <div>
                     <Label className="text-green-600">Volume</Label>
                     <Input
-                      placeholder="Volume"
+                      placeholder="Volume (optional)"
                       value={item.volume}
                       onChange={(e) => updateItem(item.id, 'volume', e.target.value)}
                     />
@@ -815,7 +817,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                     />
                   </div>
                   
-                  <div>
+                  <div className="md:col-span-2">
                     <Label className="text-green-600">Total</Label>
                     <div className="p-2 bg-green-100 rounded text-green-800 font-semibold">
                       ₹ {item.total.toFixed(2)}

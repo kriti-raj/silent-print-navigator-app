@@ -13,6 +13,7 @@ import { FileText, Users, Package, Plus, Eye, Calendar } from "lucide-react";
 
 const Index = () => {
   const [activeView, setActiveView] = useState<'dashboard' | 'invoice'>('dashboard');
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [newInvoiceId, setNewInvoiceId] = useState<string | undefined>();
   const [storeInfo, setStoreInfo] = useState<any>({});
   const [dashboardStats, setDashboardStats] = useState({
@@ -23,12 +24,28 @@ const Index = () => {
   });
 
   useEffect(() => {
-    // Load store info
+    loadStoreInfo();
+    calculateDashboardStats();
+  }, []);
+
+  // Recalculate stats when returning to dashboard
+  useEffect(() => {
+    if (activeView === 'dashboard') {
+      calculateDashboardStats();
+    }
+  }, [activeView]);
+
+  const loadStoreInfo = () => {
     const savedStoreInfo = localStorage.getItem('storeInfo');
     if (savedStoreInfo) {
       setStoreInfo(JSON.parse(savedStoreInfo));
     }
+  };
 
+  const calculateDashboardStats = () => {
+    // Load store info
+    loadStoreInfo();
+    
     // Calculate dashboard stats
     const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
     const customers = JSON.parse(localStorage.getItem('customers') || '[]');
@@ -45,7 +62,7 @@ const Index = () => {
       totalProducts: products.length,
       todayInvoices: todayInvoices.length
     });
-  }, []);
+  };
 
   const handleCreateInvoice = () => {
     setActiveView('invoice');
@@ -56,6 +73,24 @@ const Index = () => {
     if (invoiceId) {
       setNewInvoiceId(invoiceId);
     }
+    // Recalculate stats when returning from invoice creation
+    calculateDashboardStats();
+  };
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    // Recalculate stats when switching tabs
+    if (value === 'dashboard') {
+      calculateDashboardStats();
+    }
+  };
+
+  const navigateToCustomers = () => {
+    setActiveTab('customers');
+  };
+
+  const navigateToProducts = () => {
+    setActiveTab('products');
   };
 
   if (activeView === 'invoice') {
@@ -77,7 +112,7 @@ const Index = () => {
           </div>
         </div>
 
-        <Tabs defaultValue="dashboard" className="w-full">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="grid w-full grid-cols-6 bg-gradient-to-r from-purple-100 to-blue-100">
             <TabsTrigger value="dashboard" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-blue-500 data-[state=active]:text-white">Dashboard</TabsTrigger>
             <TabsTrigger value="invoices" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white">Invoices</TabsTrigger>
@@ -155,7 +190,7 @@ const Index = () => {
                   <Button 
                     variant="outline"
                     className="w-full border-blue-200 hover:bg-blue-50 text-blue-600"
-                    onClick={() => (document.querySelector('[value="customers"]') as HTMLElement)?.click()}
+                    onClick={navigateToCustomers}
                   >
                     <Users className="mr-2 h-4 w-4" />
                     Add Customer
@@ -163,7 +198,7 @@ const Index = () => {
                   <Button 
                     variant="outline"
                     className="w-full border-purple-200 hover:bg-purple-50 text-purple-600"
-                    onClick={() => (document.querySelector('[value="products"]') as HTMLElement)?.click()}
+                    onClick={navigateToProducts}
                   >
                     <Package className="mr-2 h-4 w-4" />
                     Add Product
