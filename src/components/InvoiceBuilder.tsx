@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Printer } from "lucide-react";
+import { Plus, Trash2, Printer, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { generateQRCodeDataURL } from "../utils/qrCodeGenerator";
 import { saveInvoicePDF } from "../utils/fileSystem";
@@ -56,8 +56,9 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   const [tax, setTax] = useState<number>(0);
   const [total, setTotal] = useState<number>(0);
   const [notes, setNotes] = useState<string>('');
-  const [watermarkId, setWatermarkId] = useState<string>('');
   const [gstEnabled, setGstEnabled] = useState<boolean>(false);
+  const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid'>('paid');
+  const [includePaymentQR, setIncludePaymentQR] = useState<boolean>(true);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const { toast } = useToast();
@@ -86,6 +87,24 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     return finalSettings;
   };
 
+  const generateInvoiceNumber = () => {
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const yy = String(today.getFullYear()).slice(-2);
+    const datePrefix = `${dd}${mm}${yy}`;
+    
+    // Get today's invoices to determine sequence number
+    const savedInvoices = JSON.parse(localStorage.getItem('invoices') || '[]');
+    const todayInvoices = savedInvoices.filter((inv: any) => {
+      const invDate = new Date(inv.date);
+      return invDate.toDateString() === today.toDateString();
+    });
+    
+    const sequenceNumber = String(todayInvoices.length + 1).padStart(3, '0');
+    return `${datePrefix}${sequenceNumber}`;
+  };
+
   useEffect(() => {
     // Load customers and products
     const savedCustomers = JSON.parse(localStorage.getItem('customers') || '[]');
@@ -93,10 +112,8 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     setCustomers(savedCustomers);
     setProducts(savedProducts);
 
-    // New invoice defaults
-    setInvoiceNumber(`INV-${new Date().getFullYear()}-${Date.now()}`);
-    setCustomerDetails({ name: '', phone: '', address: '', email: '' });
-    setInvoiceDate(new Date().toISOString().slice(0, 10));
+    // Generate invoice number
+    setInvoiceNumber(generateInvoiceNumber());
     
     // Start with one empty item
     const initialItem: InvoiceItem = {
@@ -109,13 +126,6 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       volume: ''
     };
     setItems([initialItem]);
-    
-    setSubtotal(0);
-    setTax(0);
-    setTotal(0);
-    setNotes('');
-    setWatermarkId('');
-    setGstEnabled(false);
   }, []);
 
   useEffect(() => {
@@ -126,70 +136,6 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     setTax(newTax);
     setTotal(+(newSubtotal + newTax).toFixed(2));
   }, [items, gstEnabled]);
-
-  const saveInvoice = () => {
-    console.log('Saving invoice...');
-    
-    const savedInvoices = JSON.parse(localStorage.getItem('invoices') || '[]');
-    const currentStoreInfo = getCurrentStoreSettings();
-    
-    const invoiceToSave = {
-      id: invoiceId,
-      invoiceNumber,
-      customerDetails,
-      storeInfo: currentStoreInfo,
-      date: invoiceDate,
-      items,
-      subtotal,
-      tax,
-      total,
-      status: 'paid' as const,
-      notes,
-      watermarkId,
-      gstEnabled
-    };
-
-    const existingIndex = savedInvoices.findIndex((inv: any) => inv.id === invoiceId);
-    
-    if (existingIndex !== -1) {
-      savedInvoices[existingIndex] = invoiceToSave;
-      console.log('Updated existing invoice');
-    } else {
-      savedInvoices.push(invoiceToSave);
-      console.log('Added new invoice');
-    }
-
-    localStorage.setItem('invoices', JSON.stringify(savedInvoices));
-
-    // Update customer's invoice list
-    if (customerDetails.name && customerDetails.phone) {
-      const savedCustomers = JSON.parse(localStorage.getItem('customers') || '[]');
-      const customerIndex = savedCustomers.findIndex((c: Customer) => 
-        c.phone === customerDetails.phone || c.name.toLowerCase() === customerDetails.name.toLowerCase()
-      );
-      
-      if (customerIndex !== -1) {
-        if (!savedCustomers[customerIndex].invoices) {
-          savedCustomers[customerIndex].invoices = [];
-        }
-        const invoiceExists = savedCustomers[customerIndex].invoices.some((invId: string) => invId === invoiceId);
-        if (!invoiceExists) {
-          savedCustomers[customerIndex].invoices.push(invoiceId);
-          localStorage.setItem('customers', JSON.stringify(savedCustomers));
-        }
-      }
-    }
-
-    console.log('Invoice saved successfully:', invoiceToSave);
-    
-    toast({
-      title: "Invoice Saved",
-      description: `Invoice ${invoiceNumber} has been saved successfully.`,
-      className: "bg-green-50 border-green-200 text-green-800"
-    });
-
-    return invoiceToSave;
-  };
 
   const addItem = () => {
     const newItem: InvoiceItem = {
@@ -260,6 +206,70 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     }
   };
 
+  const saveInvoice = () => {
+    console.log('Saving invoice...');
+    
+    const savedInvoices = JSON.parse(localStorage.getItem('invoices') || '[]');
+    const currentStoreInfo = getCurrentStoreSettings();
+    
+    const invoiceToSave = {
+      id: invoiceId,
+      invoiceNumber,
+      customerDetails,
+      storeInfo: currentStoreInfo,
+      date: invoiceDate,
+      items,
+      subtotal,
+      tax,
+      total,
+      status: paymentStatus === 'paid' ? 'paid' as const : 'pending' as const,
+      notes,
+      watermarkId: '',
+      gstEnabled
+    };
+
+    const existingIndex = savedInvoices.findIndex((inv: any) => inv.id === invoiceId);
+    
+    if (existingIndex !== -1) {
+      savedInvoices[existingIndex] = invoiceToSave;
+      console.log('Updated existing invoice');
+    } else {
+      savedInvoices.push(invoiceToSave);
+      console.log('Added new invoice');
+    }
+
+    localStorage.setItem('invoices', JSON.stringify(savedInvoices));
+
+    // Update customer's invoice list
+    if (customerDetails.name && customerDetails.phone) {
+      const savedCustomers = JSON.parse(localStorage.getItem('customers') || '[]');
+      const customerIndex = savedCustomers.findIndex((c: Customer) => 
+        c.phone === customerDetails.phone || c.name.toLowerCase() === customerDetails.name.toLowerCase()
+      );
+      
+      if (customerIndex !== -1) {
+        if (!savedCustomers[customerIndex].invoices) {
+          savedCustomers[customerIndex].invoices = [];
+        }
+        const invoiceExists = savedCustomers[customerIndex].invoices.some((invId: string) => invId === invoiceId);
+        if (!invoiceExists) {
+          savedCustomers[customerIndex].invoices.push(invoiceId);
+          localStorage.setItem('customers', JSON.stringify(savedCustomers));
+        }
+      }
+    }
+
+    console.log('Invoice saved successfully:', invoiceToSave);
+    
+    toast({
+      title: "Invoice Saved",
+      description: `Invoice ${invoiceNumber} has been saved successfully.`,
+      className: "bg-green-50 border-green-200 text-green-800"
+    });
+
+    return invoiceToSave;
+  };
+
   const generateUPIQR = (amount: number) => {
     const currentStoreSettings = getCurrentStoreSettings();
     if (currentStoreSettings.paymentQR) {
@@ -271,6 +281,121 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     const finalUpiString = upiString.replace('${amount}', amount.toString());
     const qrUrl = generateQRCodeDataURL(finalUpiString, 150);
     return qrUrl;
+  };
+
+  const generateInvoiceHTML = (invoice: any, currentStoreInfo: any, upiQRUrl: string) => {
+    const printFormat = currentStoreInfo.printFormat || 'a4';
+    
+    if (printFormat === 'thermal') {
+      return generateThermalInvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
+    }
+    
+    return generateA4InvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
+  };
+
+  const generateA4InvoiceHTML = (invoice: any, currentStoreInfo: any, upiQRUrl: string) => {
+    const hasColorCode = invoice.items.some((item: InvoiceItem) => item.colorCode);
+    const hasVolume = invoice.items.some((item: InvoiceItem) => item.volume);
+    
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Invoice ${invoice.invoiceNumber}</title>
+          <style>
+            body { font-family: Arial, sans-serif; font-size: 12px; margin: 20px; }
+            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
+            .header h1 { margin: 0; color: #333; }
+            .invoice-details { display: flex; justify-content: space-between; margin-bottom: 30px; }
+            .customer-details { margin-bottom: 30px; }
+            .items { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+            .items th, .items td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+            .items th { background-color: #f5f5f5; font-weight: bold; }
+            .totals { text-align: right; margin-bottom: 30px; }
+            .totals div { margin: 5px 0; }
+            .total-final { font-size: 16px; font-weight: bold; border-top: 2px solid #333; padding-top: 10px; }
+            .qr { text-align: center; margin: 20px 0; }
+            .qr img { width: 150px; height: 150px; }
+            .notes { margin-top: 20px; padding: 15px; background-color: #f9f9f9; border-left: 4px solid #333; }
+            .footer { text-align: center; margin-top: 40px; font-size: 10px; color: #666; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>${currentStoreInfo.name}</h1>
+            <p>${currentStoreInfo.address}</p>
+            <p>${currentStoreInfo.phone} | ${currentStoreInfo.email}</p>
+            ${currentStoreInfo.taxId ? `<p>GST Number: ${currentStoreInfo.taxId}</p>` : ''}
+          </div>
+          
+          <div class="invoice-details">
+            <div>
+              <h3>Invoice Details</h3>
+              <p><strong>Invoice Number:</strong> ${invoice.invoiceNumber}</p>
+              <p><strong>Date:</strong> ${new Date(invoice.date).toLocaleDateString()}</p>
+              <p><strong>Time:</strong> ${new Date().toLocaleTimeString()}</p>
+            </div>
+            <div>
+              <h3>Bill To:</h3>
+              <p><strong>${invoice.customerDetails.name}</strong></p>
+              <p>${invoice.customerDetails.phone}</p>
+              <p>${invoice.customerDetails.address}</p>
+              ${invoice.customerDetails.email ? `<p>${invoice.customerDetails.email}</p>` : ''}
+            </div>
+          </div>
+
+          <table class="items">
+            <thead>
+              <tr>
+                <th>Product</th>
+                ${hasColorCode ? '<th>Color Code</th>' : ''}
+                ${hasVolume ? '<th>Volume</th>' : ''}
+                <th>Quantity</th>
+                <th>Rate</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${invoice.items.map((item: InvoiceItem) => `
+                <tr>
+                  <td>${item.productName}</td>
+                  ${hasColorCode ? `<td>${item.colorCode || '-'}</td>` : ''}
+                  ${hasVolume ? `<td>${item.volume || '-'}</td>` : ''}
+                  <td>${item.quantity}</td>
+                  <td>₹${item.rate.toFixed(2)}</td>
+                  <td>₹${item.total.toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div class="totals">
+            <div>Subtotal: ₹${invoice.subtotal.toFixed(2)}</div>
+            ${invoice.gstEnabled ? `<div>GST (18%): ₹${invoice.tax.toFixed(2)}</div>` : ''}
+            <div class="total-final">Total Amount: ₹${invoice.total.toFixed(2)}</div>
+          </div>
+
+          ${upiQRUrl && includePaymentQR ? `
+            <div class="qr">
+              <h3>Scan to Pay</h3>
+              <img src="${upiQRUrl}" alt="UPI QR Code" />
+            </div>
+          ` : ''}
+
+          ${invoice.notes ? `
+            <div class="notes">
+              <h4>Notes:</h4>
+              <p>${invoice.notes}</p>
+            </div>
+          ` : ''}
+
+          <div class="footer">
+            <p>Thank you for your business!</p>
+            <p>Generated on ${new Date().toLocaleString()}</p>
+          </div>
+        </body>
+      </html>
+    `;
   };
 
   const generateThermalInvoiceHTML = (invoice: any, currentStoreInfo: any, upiQRUrl: string) => {
@@ -356,7 +481,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
             <div class="bold" style="font-size: 11px;">Total: ₹${invoice.total.toFixed(2)}</div>
           </div>
           <div class="line"></div>
-          ${upiQRUrl ? `
+          ${upiQRUrl && includePaymentQR ? `
             <div class="qr">
               <div class="bold">Scan to Pay</div>
               <img src="${upiQRUrl}" alt="UPI QR" />
@@ -376,124 +501,15 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     `;
   };
 
-  const generateA4InvoiceHTML = (invoice: any, currentStoreInfo: any, upiQRUrl: string) => {
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Invoice ${invoice.invoiceNumber}</title>
-          <style>
-            body { font-family: Arial, sans-serif; font-size: 12px; margin: 20px; }
-            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
-            .header h1 { margin: 0; color: #333; }
-            .invoice-details { display: flex; justify-content: space-between; margin-bottom: 30px; }
-            .customer-details { margin-bottom: 30px; }
-            .items { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-            .items th, .items td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-            .items th { background-color: #f5f5f5; font-weight: bold; }
-            .totals { text-align: right; margin-bottom: 30px; }
-            .totals div { margin: 5px 0; }
-            .total-final { font-size: 16px; font-weight: bold; border-top: 2px solid #333; padding-top: 10px; }
-            .qr { text-align: center; margin: 20px 0; }
-            .qr img { width: 150px; height: 150px; }
-            .notes { margin-top: 20px; padding: 15px; background-color: #f9f9f9; border-left: 4px solid #333; }
-            .footer { text-align: center; margin-top: 40px; font-size: 10px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>${currentStoreInfo.name}</h1>
-            <p>${currentStoreInfo.address}</p>
-            <p>${currentStoreInfo.phone} | ${currentStoreInfo.email}</p>
-            ${currentStoreInfo.taxId ? `<p>GST Number: ${currentStoreInfo.taxId}</p>` : ''}
-          </div>
-          
-          <div class="invoice-details">
-            <div>
-              <h3>Invoice Details</h3>
-              <p><strong>Invoice Number:</strong> ${invoice.invoiceNumber}</p>
-              <p><strong>Date:</strong> ${new Date(invoice.date).toLocaleDateString()}</p>
-              <p><strong>Time:</strong> ${new Date().toLocaleTimeString()}</p>
-            </div>
-            <div>
-              <h3>Bill To:</h3>
-              <p><strong>${invoice.customerDetails.name}</strong></p>
-              <p>${invoice.customerDetails.phone}</p>
-              <p>${invoice.customerDetails.address}</p>
-              ${invoice.customerDetails.email ? `<p>${invoice.customerDetails.email}</p>` : ''}
-            </div>
-          </div>
-
-          <table class="items">
-            <thead>
-              <tr>
-                <th>Product</th>
-                ${invoice.items.some((item: InvoiceItem) => item.colorCode) ? '<th>Color Code</th>' : ''}
-                ${invoice.items.some((item: InvoiceItem) => item.volume) ? '<th>Volume</th>' : ''}
-                <th>Quantity</th>
-                <th>Rate</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${invoice.items.map((item: InvoiceItem) => `
-                <tr>
-                  <td>${item.productName}</td>
-                  ${invoice.items.some((item: InvoiceItem) => item.colorCode) ? `<td>${item.colorCode || '-'}</td>` : ''}
-                  ${invoice.items.some((item: InvoiceItem) => item.volume) ? `<td>${item.volume || '-'}</td>` : ''}
-                  <td>${item.quantity}</td>
-                  <td>₹${item.rate.toFixed(2)}</td>
-                  <td>₹${item.total.toFixed(2)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-
-          <div class="totals">
-            <div>Subtotal: ₹${invoice.subtotal.toFixed(2)}</div>
-            ${invoice.gstEnabled ? `<div>GST (18%): ₹${invoice.tax.toFixed(2)}</div>` : ''}
-            <div class="total-final">Total Amount: ₹${invoice.total.toFixed(2)}</div>
-          </div>
-
-          ${upiQRUrl ? `
-            <div class="qr">
-              <h3>Scan to Pay</h3>
-              <img src="${upiQRUrl}" alt="UPI QR Code" />
-            </div>
-          ` : ''}
-
-          ${invoice.notes ? `
-            <div class="notes">
-              <h4>Notes:</h4>
-              <p>${invoice.notes}</p>
-            </div>
-          ` : ''}
-
-          <div class="footer">
-            <p>Thank you for your business!</p>
-            <p>Generated on ${new Date().toLocaleString()}</p>
-          </div>
-        </body>
-      </html>
-    `;
-  };
-
-  const handleSaveAndClose = () => {
-    const savedInvoice = saveInvoice();
-    onClose(savedInvoice.id);
-  };
-
   const handlePrint = async () => {
     try {
       console.log('Printing invoice...');
       
       const savedInvoice = saveInvoice();
       const currentStoreInfo = getCurrentStoreSettings();
-      const upiQRUrl = generateUPIQR(total);
+      const upiQRUrl = includePaymentQR ? generateUPIQR(total) : '';
 
-      const htmlContent = currentStoreInfo.printFormat === 'thermal' 
-        ? generateThermalInvoiceHTML(savedInvoice, currentStoreInfo, upiQRUrl)
-        : generateA4InvoiceHTML(savedInvoice, currentStoreInfo, upiQRUrl);
+      const htmlContent = generateInvoiceHTML(savedInvoice, currentStoreInfo, upiQRUrl);
 
       // Save to local file system
       await saveInvoicePDF(invoiceNumber, htmlContent);
@@ -538,96 +554,196 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6">
-      <Card className="max-w-6xl mx-auto shadow-lg border-0 bg-white">
-        <CardHeader>
-          <CardTitle className="text-2xl font-bold text-center">Create Invoice</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={(e) => { e.preventDefault(); handleSaveAndClose(); }} className="space-y-6">
-            {/* Invoice and Customer Details */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="invoiceNumber">Invoice Number</Label>
-                  <Input
-                    id="invoiceNumber"
-                    value={invoiceNumber}
-                    onChange={(e) => setInvoiceNumber(e.target.value)}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="invoiceDate">Invoice Date</Label>
-                  <Input
-                    id="invoiceDate"
-                    type="date"
-                    value={invoiceDate}
-                    onChange={(e) => setInvoiceDate(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-4">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <Button 
+            variant="outline" 
+            onClick={() => onClose()}
+            className="flex items-center gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Button>
+          <h1 className="text-2xl font-bold text-blue-600">Create Invoice</h1>
+          <div></div>
+        </div>
 
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="customer">Select Customer</Label>
-                  <Select onValueChange={selectCustomer}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose existing customer or enter manually" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customers.map((customer) => (
-                        <SelectItem key={customer.id} value={customer.id}>
-                          {customer.name} - {customer.phone}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="customerName">Customer Name</Label>
-                  <Input
-                    id="customerName"
-                    value={customerDetails.name}
-                    onChange={(e) => setCustomerDetails({ ...customerDetails, name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="customerPhone">Customer Phone</Label>
-                  <Input
-                    id="customerPhone"
-                    value={customerDetails.phone}
-                    onChange={(e) => setCustomerDetails({ ...customerDetails, phone: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="customerAddress">Customer Address</Label>
-                  <Textarea
-                    id="customerAddress"
-                    value={customerDetails.address}
-                    onChange={(e) => setCustomerDetails({ ...customerDetails, address: e.target.value })}
-                    required
-                  />
-                </div>
+        {/* Customer Details Section */}
+        <Card className="mb-6 bg-gradient-to-r from-blue-500 to-purple-600">
+          <CardHeader>
+            <CardTitle className="text-white text-lg">Customer Details</CardTitle>
+          </CardHeader>
+          <CardContent className="bg-white rounded-b-lg space-y-4">
+            <div>
+              <Label htmlFor="customer" className="text-blue-600">Select Customer (Optional)</Label>
+              <Select onValueChange={selectCustomer}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select existing customer or add new" />
+                </SelectTrigger>
+                <SelectContent>
+                  {customers.map((customer) => (
+                    <SelectItem key={customer.id} value={customer.id}>
+                      {customer.name} - {customer.phone}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="customerName" className="text-blue-600">Customer Name</Label>
+                <Input
+                  id="customerName"
+                  placeholder="Enter customer name"
+                  value={customerDetails.name}
+                  onChange={(e) => setCustomerDetails({ ...customerDetails, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="customerPhone" className="text-blue-600">Phone</Label>
+                <Input
+                  id="customerPhone"
+                  placeholder="Enter phone number"
+                  value={customerDetails.phone}
+                  onChange={(e) => setCustomerDetails({ ...customerDetails, phone: e.target.value })}
+                  required
+                />
               </div>
             </div>
+            
+            <div>
+              <Label htmlFor="customerAddress" className="text-blue-600">Address</Label>
+              <Textarea
+                id="customerAddress"
+                placeholder="Enter customer address"
+                value={customerDetails.address}
+                onChange={(e) => setCustomerDetails({ ...customerDetails, address: e.target.value })}
+                required
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="customerEmail" className="text-blue-600">Email (Optional)</Label>
+              <Input
+                id="customerEmail"
+                type="email"
+                placeholder="Enter customer email"
+                value={customerDetails.email}
+                onChange={(e) => setCustomerDetails({ ...customerDetails, email: e.target.value })}
+              />
+            </div>
+          </CardContent>
+        </Card>
 
-            {/* Invoice Items */}
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <Label className="text-lg font-semibold">Invoice Items</Label>
-                <Button type="button" variant="outline" onClick={addItem}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Item
-                </Button>
+        {/* Invoice Settings Section */}
+        <Card className="mb-6 bg-gradient-to-r from-purple-500 to-pink-500">
+          <CardHeader>
+            <CardTitle className="text-white text-lg">Invoice Settings</CardTitle>
+          </CardHeader>
+          <CardContent className="bg-white rounded-b-lg space-y-4">
+            <div>
+              <Label className="text-purple-600 font-medium">Enable GST (18%)</Label>
+              <div className="flex items-center space-x-4 mt-2">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    name="gst"
+                    checked={gstEnabled}
+                    onChange={() => setGstEnabled(true)}
+                    className="text-purple-600"
+                  />
+                  <span>Yes</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    name="gst"
+                    checked={!gstEnabled}
+                    onChange={() => setGstEnabled(false)}
+                    className="text-purple-600"
+                  />
+                  <span>No</span>
+                </label>
               </div>
-              
-              {items.map((item, index) => (
-                <div key={item.id} className="grid grid-cols-12 gap-2 items-center p-4 border rounded-lg">
-                  <div className="col-span-4">
+            </div>
+            
+            <div>
+              <Label className="text-purple-600 font-medium">Payment Status</Label>
+              <div className="flex items-center space-x-4 mt-2">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    name="payment"
+                    checked={paymentStatus === 'paid'}
+                    onChange={() => setPaymentStatus('paid')}
+                    className="text-purple-600"
+                  />
+                  <span>Paid</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    name="payment"
+                    checked={paymentStatus === 'unpaid'}
+                    onChange={() => setPaymentStatus('unpaid')}
+                    className="text-purple-600"
+                  />
+                  <span>Unpaid</span>
+                </label>
+              </div>
+            </div>
+            
+            <div>
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={includePaymentQR}
+                  onChange={() => setIncludePaymentQR(!includePaymentQR)}
+                  className="text-purple-600"
+                />
+                <span className="text-purple-600 font-medium">Include Payment QR Code</span>
+              </label>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Invoice Items Section */}
+        <Card className="mb-6 bg-gradient-to-r from-green-500 to-blue-500">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-white text-lg">Invoice Items</CardTitle>
+            <Button 
+              onClick={addItem} 
+              className="bg-white text-blue-600 hover:bg-blue-50"
+              size="sm"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add Item
+            </Button>
+          </CardHeader>
+          <CardContent className="bg-white rounded-b-lg space-y-4">
+            {items.map((item, index) => (
+              <div key={item.id} className="border rounded-lg p-4 bg-gray-50">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium text-green-600">Item {index + 1}</h4>
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => removeItem(item.id)}
+                    disabled={items.length === 1}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-green-600">Product</Label>
                     <Select onValueChange={(productId) => selectProduct(productId, item.id)}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select product" />
@@ -641,118 +757,143 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                       </SelectContent>
                     </Select>
                     <Input
-                      placeholder="Product Name"
+                      placeholder="Type product name"
                       value={item.productName}
                       onChange={(e) => updateItem(item.id, 'productName', e.target.value)}
                       className="mt-2"
                       required
                     />
                   </div>
-                  <div className="col-span-2">
+                  
+                  <div>
+                    <Label className="text-green-600">Color</Label>
                     <Input
-                      placeholder="Color Code"
+                      placeholder="Color"
                       value={item.colorCode}
                       onChange={(e) => updateItem(item.id, 'colorCode', e.target.value)}
                     />
                   </div>
-                  <div className="col-span-2">
+                  
+                  <div>
+                    <Label className="text-green-600">Volume</Label>
                     <Input
                       placeholder="Volume"
                       value={item.volume}
                       onChange={(e) => updateItem(item.id, 'volume', e.target.value)}
                     />
                   </div>
-                  <div className="col-span-1">
+                  
+                  <div>
+                    <Label className="text-green-600">Quantity</Label>
                     <Input
                       type="number"
                       min={1}
-                      placeholder="Qty"
                       value={item.quantity}
                       onChange={(e) => updateItem(item.id, 'quantity', Number(e.target.value))}
                       required
                     />
                   </div>
-                  <div className="col-span-2">
+                  
+                  <div>
+                    <Label className="text-green-600">Rate</Label>
                     <Input
                       type="number"
                       min={0}
                       step={0.01}
-                      placeholder="Rate"
                       value={item.rate}
                       onChange={(e) => updateItem(item.id, 'rate', Number(e.target.value))}
                       required
                     />
                   </div>
-                  <div className="col-span-1">
-                    <span className="font-semibold">₹{item.total.toFixed(2)}</span>
-                  </div>
-                  <div className="col-span-1">
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => removeItem(item.id)}
-                      disabled={items.length === 1}
-                    >
-                      <Trash2 className="h-4 w-4 text-red-600" />
-                    </Button>
+                  
+                  <div>
+                    <Label className="text-green-600">Total</Label>
+                    <div className="p-2 bg-green-100 rounded text-green-800 font-semibold">
+                      ₹ {item.total.toFixed(2)}
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
 
-            {/* Invoice Summary */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Additional Information Section */}
+        <Card className="mb-6 bg-gradient-to-r from-orange-500 to-red-500">
+          <CardHeader>
+            <CardTitle className="text-white text-lg">Additional Information</CardTitle>
+          </CardHeader>
+          <CardContent className="bg-white rounded-b-lg space-y-4">
+            <div>
+              <Label htmlFor="notes" className="text-orange-600">Notes</Label>
+              <Textarea
+                id="notes"
+                placeholder="Add any additional notes..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea
-                  id="notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Add any additional notes..."
+                <Label htmlFor="invoiceNumber" className="text-orange-600">Invoice Number</Label>
+                <Input
+                  id="invoiceNumber"
+                  value={invoiceNumber}
+                  onChange={(e) => setInvoiceNumber(e.target.value)}
+                  required
+                  disabled
                 />
               </div>
-              
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span>Subtotal:</span>
-                  <span className="font-semibold">₹{subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={gstEnabled}
-                      onChange={() => setGstEnabled(!gstEnabled)}
-                      className="form-checkbox"
-                    />
-                    <span>GST (18%)</span>
-                  </label>
-                  <span className="font-semibold">₹{tax.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-lg font-bold border-t pt-2">
-                  <span>Total:</span>
-                  <span>₹{total.toFixed(2)}</span>
-                </div>
+              <div>
+                <Label htmlFor="invoiceDate" className="text-orange-600">Invoice Date</Label>
+                <Input
+                  id="invoiceDate"
+                  type="date"
+                  value={invoiceDate}
+                  onChange={(e) => setInvoiceDate(e.target.value)}
+                  required
+                />
               </div>
             </div>
-
-            {/* Action Buttons */}
-            <div className="flex justify-end space-x-3 pt-6 border-t">
-              <Button type="button" variant="outline" onClick={() => onClose()}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="outline">
-                Save & Close
-              </Button>
-              <Button type="button" onClick={handlePrint} className="bg-green-600 hover:bg-green-700 text-white">
-                <Printer className="mr-2 h-4 w-4" />
-                Print Invoice
-              </Button>
+            
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-gray-600">Subtotal:</span>
+                <span className="font-semibold">₹{subtotal.toFixed(2)}</span>
+              </div>
+              {gstEnabled && (
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-gray-600">GST (18%):</span>
+                  <span className="font-semibold">₹{tax.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center text-lg font-bold border-t pt-2">
+                <span>Total:</span>
+                <span className="text-green-600">₹{total.toFixed(2)}</span>
+              </div>
             </div>
-          </form>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        {/* Action Buttons */}
+        <div className="flex justify-center space-x-4">
+          <Button 
+            variant="outline" 
+            onClick={() => onClose()}
+            className="px-8"
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handlePrint} 
+            className="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white px-8"
+          >
+            <Printer className="mr-2 h-4 w-4" />
+            Print Invoice
+          </Button>
+        </div>
+      </div>
     </div>
   );
 };
