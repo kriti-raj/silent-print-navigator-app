@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +9,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Trash2, Plus, ArrowLeft, IndianRupee, Eye, Printer, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { generateQRCodeDataURL } from "../utils/qrCodeGenerator";
 
 interface Product {
   id: string;
@@ -70,6 +70,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid'>('unpaid');
   const [includeQR, setIncludeQR] = useState<boolean>(true);
   const [storeInfo, setStoreInfo] = useState<any>({});
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
 
   const [customerDetails, setCustomerDetails] = useState({
     name: '',
@@ -104,7 +105,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       setCustomers(JSON.parse(savedCustomers));
     }
 
-    // Load store settings
+    // Load store settings and sync with invoice
     const storeSettings = JSON.parse(localStorage.getItem('storeSettings') || '{}');
     const defaultStoreInfo = {
       name: storeSettings.businessName || 'Your Business Name',
@@ -144,8 +145,16 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     setItems(items.map(item => {
       if (item.id === id) {
         const updatedItem = { ...item, [field]: value };
+        
+        // Auto-fill base price when product is selected
+        if (field === 'productName' && value) {
+          const product = products.find(p => p.name === value);
+          if (product && product.basePrice && updatedItem.rate === 0) {
+            updatedItem.rate = product.basePrice;
+          }
+        }
+        
         if (field === 'quantity' || field === 'rate') {
-          // Fix floating point precision issues
           const quantity = Number(updatedItem.quantity) || 0;
           const rate = Number(updatedItem.rate) || 0;
           updatedItem.total = Math.round((quantity * rate) * 100) / 100;
@@ -183,20 +192,22 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
   const generateUPIQR = (amount: number) => {
     if (!includeQR) return '';
     
-    const storeSettings = JSON.parse(localStorage.getItem('storeSettings') || '{}');
-    
-    if (storeSettings.paymentQR) {
-      return storeSettings.paymentQR;
+    // First try to use store settings QR
+    if (storeInfo.paymentQR) {
+      return storeInfo.paymentQR;
     }
     
+    // Then try UPI string with offline generation
     const upiSettings = JSON.parse(localStorage.getItem('upiSettings') || '{}');
     const upiString = upiSettings.upiString || 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=${amount}&cu=INR';
     const finalUpiString = upiString.replace('${amount}', amount.toString());
     
-    return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(finalUpiString)}`;
+    // Generate offline QR code
+    return generateQRCodeDataURL(finalUpiString, 150);
   };
 
   const handleCustomerSelect = (customerId: string) => {
+    setSelectedCustomerId(customerId);
     const customer = customers.find(c => c.id === customerId);
     if (customer) {
       setCustomerDetails({
@@ -220,7 +231,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       items,
       notes,
       watermarkId: '',
-      storeInfo,
+      storeInfo, // Use current store info
       subtotal,
       tax,
       total,
@@ -231,6 +242,24 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
     invoices.push(invoice);
     localStorage.setItem('invoices', JSON.stringify(invoices));
+
+    // Attach invoice to customer if selected
+    if (selectedCustomerId) {
+      const customers = JSON.parse(localStorage.getItem('customers') || '[]');
+      const customerIndex = customers.findIndex((c: Customer) => c.id === selectedCustomerId);
+      if (customerIndex !== -1) {
+        if (!customers[customerIndex].invoices) {
+          customers[customerIndex].invoices = [];
+        }
+        customers[customerIndex].invoices.push({
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          date: invoice.date,
+          total: invoice.total
+        });
+        localStorage.setItem('customers', JSON.stringify(customers));
+      }
+    }
 
     setCreatedInvoice(invoice);
     setViewMode('view');
@@ -289,6 +318,18 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     const printerSettings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
     const paperSize = printerSettings.paperSize || 'A4';
     const margins = printerSettings.margins || 10;
+
+    // Use current store info for printing
+    const currentStoreInfo = JSON.parse(localStorage.getItem('storeSettings') || '{}');
+    const printStoreInfo = {
+      name: currentStoreInfo.businessName || storeInfo.name,
+      address: currentStoreInfo.address || storeInfo.address,
+      phone: currentStoreInfo.phone || storeInfo.phone,
+      email: currentStoreInfo.email || storeInfo.email,
+      taxId: currentStoreInfo.gstNumber || storeInfo.taxId,
+      website: currentStoreInfo.website || storeInfo.website,
+      logo: currentStoreInfo.logo || storeInfo.logo
+    };
 
     const printContent = `
       <!DOCTYPE html>
@@ -393,11 +434,11 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
         </head>
         <body>
           <div class="header">
-            ${storeInfo.logo ? `<img src="${storeInfo.logo}" alt="Store Logo" class="store-logo">` : ''}
-            <h1 style="color: #667eea; margin: 10px 0;">${storeInfo.name}</h1>
-            <p style="margin: 5px 0;">${storeInfo.address}</p>
-            <p style="margin: 5px 0;">Phone: ${storeInfo.phone} | Email: ${storeInfo.email}</p>
-            <p style="margin: 5px 0; font-weight: bold;">GST No: ${storeInfo.taxId}</p>
+            ${printStoreInfo.logo ? `<img src="${printStoreInfo.logo}" alt="Store Logo" class="store-logo">` : ''}
+            <h1 style="color: #667eea; margin: 10px 0;">${printStoreInfo.name}</h1>
+            <p style="margin: 5px 0;">${printStoreInfo.address}</p>
+            <p style="margin: 5px 0;">Phone: ${printStoreInfo.phone} | Email: ${printStoreInfo.email}</p>
+            <p style="margin: 5px 0; font-weight: bold;">GST No: ${printStoreInfo.taxId}</p>
           </div>
           
           <div class="invoice-details">
@@ -467,7 +508,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       </html>
     `;
 
-    // Save invoice PDF
+    // Save invoice PDF with same content as printed
     saveInvoicePDF(createdInvoice.invoiceNumber, printContent);
 
     // True silent printing

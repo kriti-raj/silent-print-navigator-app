@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, Plus, Eye, Printer, Trash2, IndianRupee, Download, CheckCircle, Clock, AlertCircle, Search, Filter, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { invoiceApiService } from "@/services/invoiceApi";
+import { generateQRCodeDataURL } from "../utils/qrCodeGenerator";
 
 interface Invoice {
   id: string;
@@ -181,7 +182,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
     const upiString = upiSettings.upiString || 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=${amount}&cu=INR';
     const finalUpiString = upiString.replace('${amount}', amount.toString());
     
-    return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(finalUpiString)}`;
+    return generateQRCodeDataURL(finalUpiString, 150);
   };
 
   const handlePrint = async (invoice: Invoice) => {
@@ -194,6 +195,17 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
       const printerSettings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
       const paperSize = printerSettings.paperSize || 'A4';
       const margins = printerSettings.margins || 10;
+
+      const currentStoreSettings = JSON.parse(localStorage.getItem('storeSettings') || '{}');
+      const printStoreInfo = {
+        name: currentStoreSettings.businessName || normalizedInvoice.storeInfo.name,
+        address: currentStoreSettings.address || normalizedInvoice.storeInfo.address,
+        phone: currentStoreSettings.phone || normalizedInvoice.storeInfo.phone,
+        email: currentStoreSettings.email || normalizedInvoice.storeInfo.email,
+        taxId: currentStoreSettings.gstNumber || normalizedInvoice.storeInfo.taxId,
+        website: currentStoreSettings.website || normalizedInvoice.storeInfo.website,
+        logo: currentStoreSettings.logo || normalizedInvoice.storeInfo.logo
+      };
 
       const printContent = `
         <!DOCTYPE html>
@@ -298,11 +310,11 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
           </head>
           <body>
             <div class="header">
-              ${normalizedInvoice.storeInfo.logo ? `<img src="${normalizedInvoice.storeInfo.logo}" alt="Store Logo" class="store-logo">` : ''}
-              <h1 style="color: #667eea; margin: 10px 0;">${normalizedInvoice.storeInfo.name}</h1>
-              <p style="margin: 5px 0;">${normalizedInvoice.storeInfo.address}</p>
-              <p style="margin: 5px 0;">Phone: ${normalizedInvoice.storeInfo.phone} | Email: ${normalizedInvoice.storeInfo.email}</p>
-              <p style="margin: 5px 0; font-weight: bold;">GST No: ${normalizedInvoice.storeInfo.taxId}</p>
+              ${printStoreInfo.logo ? `<img src="${printStoreInfo.logo}" alt="Store Logo" class="store-logo">` : ''}
+              <h1 style="color: #667eea; margin: 10px 0;">${printStoreInfo.name}</h1>
+              <p style="margin: 5px 0;">${printStoreInfo.address}</p>
+              <p style="margin: 5px 0;">Phone: ${printStoreInfo.phone} | Email: ${printStoreInfo.email}</p>
+              <p style="margin: 5px 0; font-weight: bold;">GST No: ${printStoreInfo.taxId}</p>
             </div>
             
             <div class="invoice-details">

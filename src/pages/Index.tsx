@@ -4,7 +4,7 @@ import Products from "../components/Products";
 import Customers from "../components/Customers";
 import Invoices from "../components/Invoices";
 import InvoiceBuilder from "../components/InvoiceBuilder";
-import Reports from "../components/Reports";
+import ProtectedReports from "../components/ProtectedReports";
 import StoreSettings from "../components/StoreSettings";
 import { useState } from "react";
 
@@ -82,7 +82,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="reports" className="space-y-6">
-            <Reports />
+            <ProtectedReports />
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-6">
