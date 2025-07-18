@@ -9,7 +9,7 @@ import StoreSettings from "../components/StoreSettings";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, Users, Package, TrendingUp, Plus, Eye, Calendar } from "lucide-react";
+import { FileText, Users, Package, Plus, Eye, Calendar } from "lucide-react";
 
 const Index = () => {
   const [activeView, setActiveView] = useState<'dashboard' | 'invoice'>('dashboard');
@@ -19,8 +19,7 @@ const Index = () => {
     totalInvoices: 0,
     totalCustomers: 0,
     totalProducts: 0,
-    todayInvoices: 0,
-    totalRevenue: 0
+    todayInvoices: 0
   });
 
   useEffect(() => {
@@ -39,17 +38,12 @@ const Index = () => {
     const todayInvoices = invoices.filter((invoice: any) => 
       new Date(invoice.date).toDateString() === today
     );
-    
-    const totalRevenue = invoices
-      .filter((invoice: any) => invoice.status === 'paid')
-      .reduce((sum: number, invoice: any) => sum + (invoice.total || 0), 0);
 
     setDashboardStats({
       totalInvoices: invoices.length,
       totalCustomers: customers.length,
       totalProducts: products.length,
-      todayInvoices: todayInvoices.length,
-      totalRevenue
+      todayInvoices: todayInvoices.length
     });
   }, []);
 
@@ -131,12 +125,12 @@ const Index = () => {
 
               <Card className="shadow-lg border-0 bg-gradient-to-br from-purple-500 to-pink-500 text-white">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                  <TrendingUp className="h-4 w-4" />
+                  <CardTitle className="text-sm font-medium">Total Products</CardTitle>
+                  <Package className="h-4 w-4" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">₹{dashboardStats.totalRevenue.toFixed(0)}</div>
-                  <p className="text-xs text-purple-100">From paid invoices</p>
+                  <div className="text-2xl font-bold">{dashboardStats.totalProducts}</div>
+                  <p className="text-xs text-purple-100">Available products</p>
                 </CardContent>
               </Card>
             </div>
@@ -161,7 +155,7 @@ const Index = () => {
                   <Button 
                     variant="outline"
                     className="w-full border-blue-200 hover:bg-blue-50 text-blue-600"
-                    onClick={() => (document.querySelector('[data-state="active"][value="customers"]') as HTMLElement)?.click()}
+                    onClick={() => (document.querySelector('[value="customers"]') as HTMLElement)?.click()}
                   >
                     <Users className="mr-2 h-4 w-4" />
                     Add Customer
@@ -169,7 +163,7 @@ const Index = () => {
                   <Button 
                     variant="outline"
                     className="w-full border-purple-200 hover:bg-purple-50 text-purple-600"
-                    onClick={() => (document.querySelector('[data-state="active"][value="products"]') as HTMLElement)?.click()}
+                    onClick={() => (document.querySelector('[value="products"]') as HTMLElement)?.click()}
                   >
                     <Package className="mr-2 h-4 w-4" />
                     Add Product
@@ -196,15 +190,15 @@ const Index = () => {
               <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-purple-50">
                 <CardHeader>
                   <CardTitle className="text-purple-800 flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5" />
-                    Business Overview
+                    <FileText className="h-5 w-5" />
+                    Business Summary
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2 text-sm">
-                    <p className="text-purple-700">Total Revenue: ₹{dashboardStats.totalRevenue.toFixed(0)}</p>
-                    <p className="text-purple-700">Avg per Invoice: ₹{dashboardStats.totalInvoices > 0 ? (dashboardStats.totalRevenue / dashboardStats.totalInvoices).toFixed(0) : '0'}</p>
-                    <p className="text-purple-700">Performance: Growing 📈</p>
+                    <p className="text-purple-700">Active since: {new Date().getFullYear()}</p>
+                    <p className="text-purple-700">Total operations: {dashboardStats.totalInvoices}</p>
+                    <p className="text-purple-700">Status: Operational ✅</p>
                   </div>
                 </CardContent>
               </Card>
