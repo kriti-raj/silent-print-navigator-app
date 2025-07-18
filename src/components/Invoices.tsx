@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Eye, Edit, Trash2, FileText, Calendar } from "lucide-react";
+import { Plus, Search, Eye, Edit, Trash2, FileText, Calendar, Printer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { generateQRCodeDataURL } from "../utils/qrCodeGenerator";
 import { saveInvoicePDF } from "../utils/fileSystem";
@@ -27,6 +26,7 @@ interface Invoice {
     website: string;
     logo?: string;
     paymentQR?: string;
+    printFormat?: 'a4' | 'thermal';
   };
   date: string;
   items: Array<{
@@ -57,6 +57,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
   const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'today' | 'paid' | 'pending' | 'overdue'>('all');
+  const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -128,6 +129,12 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
   };
 
   const generateInvoiceHTML = (invoice: Invoice, upiQRUrl: string) => {
+    const printFormat = invoice.storeInfo.printFormat || 'a4';
+    
+    if (printFormat === 'thermal') {
+      return generateThermalInvoiceHTML(invoice, upiQRUrl);
+    }
+    
     return `
       <!DOCTYPE html>
       <html>
@@ -227,6 +234,120 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
         </body>
       </html>
     `;
+  };
+
+  const generateThermalInvoiceHTML = (invoice: Invoice, upiQRUrl: string) => {
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Invoice ${invoice.invoiceNumber}</title>
+          <style>
+            @page { size: 80mm auto; margin: 2mm; }
+            body { 
+              font-family: 'Courier New', monospace; 
+              font-size: 10px; 
+              line-height: 1.2;
+              width: 72mm;
+              margin: 0;
+              padding: 2mm;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .line { border-bottom: 1px dashed #000; margin: 2px 0; }
+            .items { width: 100%; }
+            .items th, .items td { 
+              text-align: left; 
+              padding: 1px;
+              font-size: 9px;
+            }
+            .right { text-align: right; }
+            .qr { text-align: center; margin: 5px 0; }
+            .qr img { width: 40mm; height: 40mm; }
+          </style>
+        </head>
+        <body>
+          <div class="center">
+            <div class="bold" style="font-size: 12px;">${invoice.storeInfo.name}</div>
+            <div>${invoice.storeInfo.address}</div>
+            <div>${invoice.storeInfo.phone}</div>
+            <div>${invoice.storeInfo.email}</div>
+            ${invoice.storeInfo.taxId ? `<div>GST: ${invoice.storeInfo.taxId}</div>` : ''}
+          </div>
+          <div class="line"></div>
+          <div>
+            <div><span class="bold">Invoice:</span> ${invoice.invoiceNumber}</div>
+            <div><span class="bold">Date:</span> ${new Date(invoice.date).toLocaleDateString()}</div>
+            <div><span class="bold">Status:</span> ${invoice.status.toUpperCase()}</div>
+          </div>
+          <div class="line"></div>
+          <div>
+            <div class="bold">BILL TO:</div>
+            <div>${invoice.customerDetails.name}</div>
+            <div>${invoice.customerDetails.phone}</div>
+            <div>${invoice.customerDetails.address}</div>
+          </div>
+          <div class="line"></div>
+          <table class="items">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Rate</th>
+                <th>Amt</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${invoice.items.map((item) => `
+                <tr>
+                  <td style="width: 40%;">
+                    ${item.productName}
+                    ${item.colorCode ? `<br/><small>${item.colorCode}</small>` : ''}
+                    ${item.volume ? `<br/><small>${item.volume}</small>` : ''}
+                  </td>
+                  <td style="width: 15%;">${item.quantity}</td>
+                  <td style="width: 20%;">₹${item.rate.toFixed(2)}</td>
+                  <td style="width: 25%;" class="right">₹${item.total.toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="line"></div>
+          <div class="right">
+            <div>Subtotal: ₹${invoice.subtotal.toFixed(2)}</div>
+            ${invoice.gstEnabled ? `<div>GST (18%): ₹${invoice.tax.toFixed(2)}</div>` : ''}
+            <div class="bold" style="font-size: 11px;">Total: ₹${invoice.total.toFixed(2)}</div>
+          </div>
+          <div class="line"></div>
+          ${upiQRUrl ? `
+            <div class="qr">
+              <div class="bold">Scan to Pay</div>
+              <img src="${upiQRUrl}" alt="UPI QR" />
+            </div>
+          ` : ''}
+          ${invoice.notes ? `
+            <div class="line"></div>
+            <div><span class="bold">Notes:</span> ${invoice.notes}</div>
+          ` : ''}
+          <div class="line"></div>
+          <div class="center">
+            <div>Thank you for your business!</div>
+            <div style="font-size: 8px;">Generated on ${new Date().toLocaleString()}</div>
+          </div>
+        </body>
+      </html>
+    `;
+  };
+
+  const viewInvoice = (invoice: Invoice) => {
+    const upiQRUrl = generateUPIQR(invoice.total, invoice.storeInfo);
+    const htmlContent = generateInvoiceHTML(invoice, upiQRUrl);
+
+    const newWindow = window.open('', '_blank');
+    if (newWindow) {
+      newWindow.document.write(htmlContent);
+      newWindow.document.close();
+    }
   };
 
   const printInvoice = async (invoice: Invoice) => {
@@ -440,15 +561,25 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => printInvoice(invoice)}
+                      onClick={() => viewInvoice(invoice)}
+                      title="View Invoice"
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={() => printInvoice(invoice)}
+                      title="Print Invoice"
+                    >
+                      <Printer className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => deleteInvoice(invoice.id)}
                       className="text-red-600 hover:text-red-700"
+                      title="Delete Invoice"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
