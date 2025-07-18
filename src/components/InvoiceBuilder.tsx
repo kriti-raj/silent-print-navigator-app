@@ -107,14 +107,26 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     console.log('Getting current store settings...');
     
     // Try different possible keys where store settings might be stored
-    const possibleKeys = ['storeSettings', 'store_settings', 'businessSettings'];
+    const possibleKeys = ['storeInfo', 'storeSettings', 'store_settings', 'businessSettings'];
     let storeSettings: StoreSettings = {};
     
     for (const key of possibleKeys) {
       const settings = localStorage.getItem(key);
       if (settings) {
         try {
-          storeSettings = JSON.parse(settings) as StoreSettings;
+          const parsed = JSON.parse(settings);
+          storeSettings = {
+            businessName: parsed.businessName || parsed.name,
+            name: parsed.name || parsed.businessName,
+            address: parsed.address,
+            phone: parsed.phone,
+            email: parsed.email,
+            gstNumber: parsed.gstNumber || parsed.taxId,
+            taxId: parsed.taxId || parsed.gstNumber,
+            website: parsed.website,
+            logo: parsed.logo,
+            paymentQR: parsed.paymentQR
+          };
           console.log(`Found store settings in key: ${key}`, storeSettings);
           break;
         } catch (e) {
