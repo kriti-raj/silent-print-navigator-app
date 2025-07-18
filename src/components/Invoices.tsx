@@ -92,10 +92,13 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
     // Filter by status
     if (filterStatus !== 'all') {
       if (filterStatus === 'today') {
-        const today = new Date().toDateString();
-        filtered = filtered.filter(invoice => 
-          new Date(invoice.date).toDateString() === today
-        );
+        const today = new Date();
+        filtered = filtered.filter(invoice => {
+          const invDate = new Date(invoice.date);
+          return invDate.getDate() === today.getDate() && 
+                 invDate.getMonth() === today.getMonth() && 
+                 invDate.getFullYear() === today.getFullYear();
+        });
       } else {
         filtered = filtered.filter(invoice => invoice.status === filterStatus);
       }
@@ -404,9 +407,13 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
     }
   };
 
-  const todayInvoicesCount = invoices.filter(invoice => 
-    new Date(invoice.date).toDateString() === new Date().toDateString()
-  ).length;
+  const todayInvoicesCount = invoices.filter(invoice => {
+    const today = new Date();
+    const invDate = new Date(invoice.date);
+    return invDate.getDate() === today.getDate() && 
+           invDate.getMonth() === today.getMonth() && 
+           invDate.getFullYear() === today.getFullYear();
+  }).length;
 
   return (
     <div className="space-y-6">

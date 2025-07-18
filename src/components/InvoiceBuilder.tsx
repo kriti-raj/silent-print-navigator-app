@@ -97,11 +97,14 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     const savedInvoices = JSON.parse(localStorage.getItem('invoices') || '[]');
     const todayInvoices = savedInvoices.filter((inv: any) => {
       const invDate = new Date(inv.date);
-      return invDate.toDateString() === today.toDateString();
+      const today = new Date();
+      return invDate.getDate() === today.getDate() && 
+             invDate.getMonth() === today.getMonth() && 
+             invDate.getFullYear() === today.getFullYear();
     });
     
     const sequenceNumber = String(todayInvoices.length + 1).padStart(3, '0');
-    return `${datePrefix}${sequenceNumber}`;
+    return `${datePrefix}-${sequenceNumber}`;
   };
 
   useEffect(() => {
@@ -224,11 +227,11 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       subtotal,
       tax,
       total,
-      status: paymentStatus, // Use the actual payment status selected
+      status: paymentStatus,
       notes,
       watermarkId: '',
       gstEnabled,
-      savedQRCode: upiQRUrl // Save the QR code with the invoice
+      savedQRCode: upiQRUrl
     };
 
     const existingIndex = savedInvoices.findIndex((inv: any) => inv.id === invoiceId);
@@ -243,7 +246,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
 
     localStorage.setItem('invoices', JSON.stringify(savedInvoices));
 
-    // Update customer's invoice list
+    // Update customer's invoice list - but don't add duplicate entries
     if (customerDetails.name && customerDetails.phone) {
       const savedCustomers = JSON.parse(localStorage.getItem('customers') || '[]');
       const customerIndex = savedCustomers.findIndex((c: Customer) => 
