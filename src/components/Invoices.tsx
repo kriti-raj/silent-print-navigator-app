@@ -73,11 +73,9 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
   const [showTodayOnly, setShowTodayOnly] = useState(true);
   const { toast } = useToast();
 
-  // Fixed function to get current store settings with proper typing
-  const getCurrentStoreSettings = () => {
+  const getCurrentStoreSettings = (): StoreSettings => {
     console.log('Getting current store settings in Invoices...');
     
-    // Try different possible keys where store settings might be stored
     const possibleKeys = ['storeInfo', 'storeSettings', 'store_settings', 'businessSettings'];
     let storeSettings: StoreSettings = {};
     
@@ -106,7 +104,6 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
       }
     }
     
-    // If no settings found, create default structure
     if (Object.keys(storeSettings).length === 0) {
       console.log('No store settings found, using defaults');
       storeSettings = {
@@ -140,7 +137,6 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
     const savedInvoices = localStorage.getItem('invoices');
     if (savedInvoices) {
       const parsedInvoices = JSON.parse(savedInvoices);
-      // Sort by date (newest first)
       const sortedInvoices = parsedInvoices.sort((a: Invoice, b: Invoice) => 
         new Date(b.date).getTime() - new Date(a.date).getTime()
       );
@@ -188,7 +184,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
         address: invoice.customerDetails?.address || '',
         email: invoice.customerDetails?.email || ''
       },
-      storeInfo: currentStoreInfo, // Always use current store settings
+      storeInfo: currentStoreInfo,
       date: invoice.date || new Date().toISOString(),
       items: (invoice.items || []).map((item: any) => ({
         id: item.id || '',
@@ -269,7 +265,69 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
     const printerSettings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
     const paperSize = printerSettings.paperSize || 'A4';
     const margins = printerSettings.margins || 10;
+    const template = printerSettings.template || 'normal';
 
+    // Compact thermal template
+    if (template === 'thermal') {
+      return `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Invoice ${invoice.invoiceNumber}</title>
+            <style>
+              @media print { 
+                @page { margin: 5mm; size: 80mm auto; }
+                body { -webkit-print-color-adjust: exact; }
+              }
+              body { 
+                font-family: monospace; 
+                font-size: 12px; 
+                line-height: 1.2; 
+                margin: 0; 
+                padding: 5px;
+                max-width: 280px;
+              }
+              .center { text-align: center; }
+              .bold { font-weight: bold; }
+              .line { border-bottom: 1px dashed #000; margin: 3px 0; }
+              .row { display: flex; justify-content: space-between; margin: 2px 0; }
+              .total-row { font-weight: bold; font-size: 14px; }
+              .qr { text-align: center; margin: 10px 0; }
+              .qr img { width: 80px; height: 80px; }
+            </style>
+          </head>
+          <body>
+            <div class="center bold">${currentStoreInfo.name}</div>
+            <div class="center">${currentStoreInfo.phone}</div>
+            <div class="line"></div>
+            <div class="row"><span>Invoice:</span><span>${invoice.invoiceNumber}</span></div>
+            <div class="row"><span>Date:</span><span>${new Date(invoice.date).toLocaleDateString()}</span></div>
+            <div class="row"><span>Customer:</span><span>${invoice.customerDetails.name}</span></div>
+            <div class="line"></div>
+            ${invoice.items.map(item => `
+              <div>${item.productName}${item.colorCode ? ` - ${item.colorCode}` : ''}</div>
+              <div class="row">
+                <span>${item.quantity} x ₹${item.rate.toFixed(2)}</span>
+                <span>₹${item.total.toFixed(2)}</span>
+              </div>
+            `).join('')}
+            <div class="line"></div>
+            <div class="row"><span>Subtotal:</span><span>₹${invoice.subtotal.toFixed(2)}</span></div>
+            ${invoice.gstEnabled ? `<div class="row"><span>GST (18%):</span><span>₹${invoice.tax.toFixed(2)}</span></div>` : ''}
+            <div class="row total-row"><span>TOTAL:</span><span>₹${invoice.total.toFixed(2)}</span></div>
+            ${upiQRUrl ? `
+              <div class="qr">
+                <div>Scan to Pay</div>
+                <img src="${upiQRUrl}" alt="Payment QR" />
+              </div>
+            ` : ''}
+            <div class="center">Thank you!</div>
+          </body>
+        </html>
+      `;
+    }
+
+    // Improved compact normal template
     return `
       <!DOCTYPE html>
       <html>
@@ -277,335 +335,168 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
           <title>Invoice ${invoice.invoiceNumber}</title>
           <style>
             @media print { 
-              @page { 
-                margin: ${margins}mm; 
-                size: ${paperSize};
-              }
-              body { 
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-              }
-            }
-            * {
-              box-sizing: border-box;
+              @page { margin: ${margins}mm; size: ${paperSize}; }
+              body { -webkit-print-color-adjust: exact; }
+              .no-print { display: none; }
             }
             body { 
-              font-family: 'Arial', sans-serif; 
+              font-family: Arial, sans-serif; 
               margin: 0; 
-              padding: 20px;
-              font-size: ${paperSize === 'A5' ? '11px' : '13px'};
-              line-height: 1.4;
-              color: #333;
-              background: #f8f9fa;
-            }
-            .invoice-container {
-              max-width: 800px;
-              margin: 0 auto;
-              background: white;
-              box-shadow: 0 0 20px rgba(0,0,0,0.1);
-              border-radius: 8px;
-              overflow: hidden;
+              padding: 15px;
+              font-size: 12px;
+              line-height: 1.3;
             }
             .header { 
               text-align: center; 
-              padding: 25px;
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-              color: white;
+              padding: 15px 0;
+              border-bottom: 2px solid #333;
+              margin-bottom: 15px;
             }
-            .store-logo { 
-              height: 60px; 
+            .store-name { font-size: 20px; font-weight: bold; margin-bottom: 5px; }
+            .store-details { font-size: 11px; margin: 2px 0; }
+            .invoice-info { 
+              display: grid; 
+              grid-template-columns: 1fr 1fr; 
+              gap: 20px; 
               margin-bottom: 15px; 
-              border-radius: 8px;
             }
-            .store-name {
-              font-size: 28px;
-              font-weight: bold;
-              margin: 10px 0;
-              text-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            }
-            .store-details {
-              font-size: 14px;
-              margin: 5px 0;
-              opacity: 0.9;
-            }
-            .invoice-details { 
-              display: flex; 
-              justify-content: space-between;
-              padding: 25px;
-              background: #f8f9fa;
-              border-bottom: 2px solid #e9ecef;
-            }
-            .invoice-info, .customer-info {
-              flex: 1;
-            }
-            .invoice-info {
-              text-align: left;
-            }
-            .customer-info {
-              text-align: right;
-              padding-left: 20px;
-            }
-            .section-title {
-              font-size: 16px;
-              font-weight: bold;
-              color: #667eea;
-              margin-bottom: 10px;
-              border-bottom: 2px solid #667eea;
-              padding-bottom: 5px;
-            }
-            .info-line {
-              margin: 8px 0;
-              display: flex;
-              align-items: center;
-            }
-            .info-label {
-              font-weight: bold;
-              margin-right: 8px;
-              color: #495057;
-            }
-            .status-badge {
-              background: #e7f3ff;
-              color: #0066cc;
-              padding: 4px 12px;
-              border-radius: 20px;
-              font-size: 12px;
-              font-weight: bold;
-              text-transform: uppercase;
-            }
-            .items-section {
-              padding: 25px;
-            }
+            .section-title { font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 1px solid #ccc; }
+            .info-line { margin: 3px 0; font-size: 11px; }
             .items-table { 
               width: 100%; 
               border-collapse: collapse; 
-              margin-top: 15px;
-              border-radius: 8px;
-              overflow: hidden;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+              margin: 15px 0;
+              font-size: 11px;
             }
-            .items-table th {
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-              color: white;
-              padding: 15px 12px;
+            .items-table th, .items-table td { 
+              padding: 6px 4px; 
+              border-bottom: 1px solid #ddd;
               text-align: left;
-              font-weight: bold;
-              font-size: 14px;
             }
-            .items-table td { 
-              padding: 12px; 
-              border-bottom: 1px solid #e9ecef;
-              vertical-align: top;
-            }
-            .items-table tr:nth-child(even) { 
-              background-color: #f8f9fa; 
-            }
-            .items-table tr:hover {
-              background-color: #e3f2fd;
-            }
-            .item-name {
-              font-weight: 600;
-              color: #333;
-            }
-            .item-total {
-              font-weight: bold;
-              color: #667eea;
-              font-size: 15px;
+            .items-table th { 
+              background: #f5f5f5; 
+              font-weight: bold; 
             }
             .footer-section { 
-              display: flex; 
-              justify-content: space-between; 
-              align-items: flex-start; 
-              padding: 25px;
-              background: #f8f9fa;
+              display: grid; 
+              grid-template-columns: auto 1fr; 
+              gap: 20px; 
+              margin-top: 15px;
+              align-items: start;
             }
             .qr-section { 
-              text-align: center; 
-              padding: 20px;
-              background: white;
-              border: 2px dashed #667eea;
-              border-radius: 12px;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            }
-            .qr-title {
-              font-weight: bold;
-              color: #667eea;
-              margin-bottom: 10px;
-              font-size: 14px;
+              text-align: center;
+              max-width: 120px;
             }
             .qr-section img { 
-              width: 120px; 
-              height: 120px; 
-              border: 2px solid #667eea;
-              border-radius: 8px;
-            }
-            .qr-amount {
-              margin-top: 8px;
-              font-size: 12px;
-              color: #666;
-              font-weight: 500;
+              width: 100px; 
+              height: 100px; 
             }
             .totals { 
-              background: white;
-              padding: 20px;
-              border-radius: 8px;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-              min-width: 280px;
+              text-align: right;
+              font-size: 12px;
             }
             .total-row { 
               display: flex; 
               justify-content: space-between; 
-              margin: 10px 0; 
-              padding: 8px 0; 
-              border-bottom: 1px solid #e9ecef;
-              font-size: 14px;
-            }
-            .total-label {
-              color: #495057;
-              font-weight: 500;
-            }
-            .total-value {
-              font-weight: bold;
-              color: #333;
+              margin: 4px 0; 
+              padding: 2px 0;
             }
             .final-total { 
-              border-top: 3px solid #667eea !important;
-              border-bottom: none !important;
-              padding-top: 15px !important;
-              margin-top: 10px;
-              font-size: 18px;
+              font-weight: bold; 
+              font-size: 14px; 
+              border-top: 2px solid #333; 
+              padding-top: 6px;
+              margin-top: 6px;
             }
-            .final-total .total-label {
-              color: #667eea;
-              font-weight: bold;
-            }
-            .final-total .total-value {
-              color: #667eea;
-              font-size: 20px;
-            }
-            .notes-section {
-              padding: 25px;
-              background: #fff8e1;
-              border-left: 4px solid #ffc107;
-              margin: 20px 25px;
-              border-radius: 0 8px 8px 0;
-            }
-            .notes-title {
-              font-weight: bold;
-              color: #f57c00;
-              margin-bottom: 8px;
-            }
-            .notes-content {
-              color: #5d4037;
-              line-height: 1.5;
-            }
-            .footer-text {
-              text-align: center;
-              padding: 20px;
-              color: #666;
-              font-size: 12px;
-              border-top: 1px solid #e9ecef;
-            }
-            @media print {
-              .invoice-container {
-                box-shadow: none;
-                border-radius: 0;
-              }
-              body {
-                background: white;
-                padding: 0;
-              }
+            .notes { 
+              margin: 15px 0; 
+              padding: 10px; 
+              background: #f9f9f9; 
+              border-left: 3px solid #ccc;
+              font-size: 11px;
             }
           </style>
         </head>
         <body>
-          <div class="invoice-container">
-            <div class="header">
-              ${currentStoreInfo.logo ? `<img src="${currentStoreInfo.logo}" alt="Store Logo" class="store-logo">` : ''}
-              <div class="store-name">${currentStoreInfo.name}</div>
-              <div class="store-details">${currentStoreInfo.address}</div>
-              <div class="store-details">Phone: ${currentStoreInfo.phone} | Email: ${currentStoreInfo.email}</div>
-              <div class="store-details">GST No: ${currentStoreInfo.taxId}</div>
+          <div class="header">
+            <div class="store-name">${currentStoreInfo.name}</div>
+            <div class="store-details">${currentStoreInfo.address}</div>
+            <div class="store-details">Phone: ${currentStoreInfo.phone} | Email: ${currentStoreInfo.email}</div>
+            <div class="store-details">GST No: ${currentStoreInfo.taxId}</div>
+          </div>
+          
+          <div class="invoice-info">
+            <div>
+              <div class="section-title">Invoice Details</div>
+              <div class="info-line"><strong>Invoice #:</strong> ${invoice.invoiceNumber}</div>
+              <div class="info-line"><strong>Date:</strong> ${new Date(invoice.date).toLocaleDateString()}</div>
+              <div class="info-line"><strong>Status:</strong> ${invoice.status}</div>
             </div>
-            
-            <div class="invoice-details">
-              <div class="invoice-info">
-                <div class="section-title">Invoice Details</div>
-                <div class="info-line"><span class="info-label">Invoice #:</span> ${invoice.invoiceNumber}</div>
-                <div class="info-line"><span class="info-label">Date:</span> ${new Date(invoice.date).toLocaleDateString()}</div>
-                <div class="info-line"><span class="info-label">Status:</span> <span class="status-badge">${invoice.status}</span></div>
+            <div>
+              <div class="section-title">Customer Details</div>
+              <div class="info-line"><strong>Name:</strong> ${invoice.customerDetails.name}</div>
+              <div class="info-line"><strong>Phone:</strong> ${invoice.customerDetails.phone}</div>
+              <div class="info-line"><strong>Address:</strong> ${invoice.customerDetails.address}</div>
+            </div>
+          </div>
+          
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th>Item Description</th>
+                <th style="width: 60px;">Qty</th>
+                <th style="width: 80px;">Rate</th>
+                <th style="width: 90px;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${invoice.items.map(item => `
+                <tr>
+                  <td>${item.productName}${item.colorCode ? ` - ${item.colorCode}` : ''}${item.volume ? ` - ${item.volume}` : ''}</td>
+                  <td style="text-align: center;">${item.quantity}</td>
+                  <td style="text-align: right;">₹${item.rate.toFixed(2)}</td>
+                  <td style="text-align: right; font-weight: bold;">₹${item.total.toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <div class="footer-section">
+            ${upiQRUrl ? `
+              <div class="qr-section">
+                <div style="font-size: 11px; margin-bottom: 5px;">Scan to Pay</div>
+                <img src="${upiQRUrl}" alt="Payment QR" />
+                <div style="font-size: 10px; margin-top: 3px;">₹${invoice.total.toFixed(2)}</div>
               </div>
-              <div class="customer-info">
-                <div class="section-title">Customer Details</div>
-                <div class="info-line"><span class="info-label">Name:</span> ${invoice.customerDetails.name}</div>
-                <div class="info-line"><span class="info-label">Phone:</span> ${invoice.customerDetails.phone}</div>
-                <div class="info-line"><span class="info-label">Address:</span> ${invoice.customerDetails.address}</div>
-                ${invoice.customerDetails.email ? `<div class="info-line"><span class="info-label">Email:</span> ${invoice.customerDetails.email}</div>` : ''}
+            ` : '<div></div>'}
+            
+            <div class="totals">
+              <div class="total-row">
+                <span>Subtotal:</span>
+                <span>₹${invoice.subtotal.toFixed(2)}</span>
               </div>
-            </div>
-            
-            <div class="items-section">
-              <div class="section-title">Items</div>
-              <table class="items-table">
-                <thead>
-                  <tr>
-                    <th>Item Description</th>
-                    <th style="width: 80px;">Qty</th>
-                    <th style="width: 100px;">Rate</th>
-                    <th style="width: 120px;">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${invoice.items.map(item => `
-                    <tr>
-                      <td class="item-name">
-                        ${item.productName}${item.colorCode ? ` - ${item.colorCode}` : ''}${item.volume ? ` - ${item.volume}` : ''}
-                      </td>
-                      <td style="text-align: center; font-weight: 600;">${item.quantity}</td>
-                      <td style="text-align: right; font-weight: 600;">₹${item.rate.toFixed(2)}</td>
-                      <td class="item-total" style="text-align: right;">₹${item.total.toFixed(2)}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-            
-            <div class="footer-section">
-              ${upiQRUrl ? `
-                <div class="qr-section">
-                  <div class="qr-title">Payment QR Code</div>
-                  <img src="${upiQRUrl}" alt="Payment QR" />
-                  <div class="qr-amount">Scan to pay ₹${invoice.total.toFixed(2)}</div>
-                </div>
-              ` : '<div></div>'}
-              
-              <div class="totals">
+              ${invoice.gstEnabled ? `
                 <div class="total-row">
-                  <span class="total-label">Subtotal:</span>
-                  <span class="total-value">₹${invoice.subtotal.toFixed(2)}</span>
+                  <span>GST (18%):</span>
+                  <span>₹${invoice.tax.toFixed(2)}</span>
                 </div>
-                ${invoice.gstEnabled ? `
-                  <div class="total-row">
-                    <span class="total-label">GST (18%):</span>
-                    <span class="total-value">₹${invoice.tax.toFixed(2)}</span>
-                  </div>
-                ` : ''}
-                <div class="total-row final-total">
-                  <span class="total-label">Total:</span>
-                  <span class="total-value">₹${invoice.total.toFixed(2)}</span>
-                </div>
+              ` : ''}
+              <div class="total-row final-total">
+                <span>Total:</span>
+                <span>₹${invoice.total.toFixed(2)}</span>
               </div>
             </div>
-            
-            ${invoice.notes ? `
-              <div class="notes-section">
-                <div class="notes-title">Notes:</div>
-                <div class="notes-content">${invoice.notes}</div>
-              </div>
-            ` : ''}
-            
-            <div class="footer-text">
-              Thank you for your business!
+          </div>
+          
+          ${invoice.notes ? `
+            <div class="notes">
+              <strong>Notes:</strong> ${invoice.notes}
             </div>
+          ` : ''}
+          
+          <div style="text-align: center; margin-top: 20px; font-size: 11px;">
+            Thank you for your business!
           </div>
         </body>
       </html>
@@ -617,16 +508,14 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
       console.log('Printing invoice:', invoice.invoiceNumber);
       
       const normalizedInvoice = normalizeInvoice(invoice);
-      const currentStoreInfo = getCurrentStoreSettings(); // Always use current settings
+      const currentStoreInfo = getCurrentStoreSettings();
       const upiQRUrl = generateUPIQR(normalizedInvoice.total);
 
       console.log('Printing with store info in Invoices:', currentStoreInfo);
       console.log('UPI QR URL for printing in Invoices:', upiQRUrl ? 'Generated' : 'Not generated');
 
-      // Generate the exact same HTML for both printing and saving
       const htmlContent = generateInvoiceHTML(normalizedInvoice, currentStoreInfo, upiQRUrl);
 
-      // Save invoice PDF with same content as printed
       await saveInvoicePDF(normalizedInvoice.invoiceNumber, htmlContent);
 
       const iframe = document.createElement('iframe');
@@ -710,8 +599,23 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
     return matchesSearch && matchesTab && matchesDate;
   });
 
+  // Get current store info for dashboard display
+  const currentStoreInfo = getCurrentStoreSettings();
+
   return (
     <div className="space-y-6 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6 rounded-lg">
+      {/* Beautiful store name header */}
+      <div className="text-center mb-8">
+        <div className="inline-block">
+          <h1 className="text-5xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2 tracking-wide">
+            {currentStoreInfo.name}
+          </h1>
+          <div className="w-full h-1 bg-gradient-to-r from-purple-400 via-blue-400 to-indigo-400 rounded-full mb-4"></div>
+          <p className="text-gray-600 font-medium">{currentStoreInfo.address}</p>
+          <p className="text-sm text-gray-500">{currentStoreInfo.phone} | {currentStoreInfo.email}</p>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Invoices</h2>
@@ -776,7 +680,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
             <div className="grid gap-4">
               {filteredInvoices.map((invoice) => (
                 <Card key={invoice.id} className={`shadow-lg border-0 bg-gradient-to-br from-white to-blue-50 ${highlightInvoiceId === invoice.id ? 'ring-2 ring-purple-500 shadow-purple-200' : ''}`}>
-                  <CardHeader>
+                  <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
                         {getStatusIcon(invoice.status)}
@@ -805,19 +709,19 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <CardContent className="pt-0">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-3 rounded-lg">
-                        <p className="text-sm text-blue-600 font-medium">Customer</p>
-                        <p className="font-medium text-blue-800">{invoice.customerDetails?.name}</p>
-                        <p className="text-sm text-blue-600">{invoice.customerDetails?.phone}</p>
+                        <p className="text-xs text-blue-600 font-medium">Customer</p>
+                        <p className="font-medium text-blue-800 text-sm">{invoice.customerDetails?.name}</p>
+                        <p className="text-xs text-blue-600">{invoice.customerDetails?.phone}</p>
                       </div>
                       <div className="bg-gradient-to-r from-green-50 to-blue-50 p-3 rounded-lg">
-                        <p className="text-sm text-green-600 font-medium">Items</p>
-                        <p className="font-medium text-green-800">{invoice.items?.length || 0} item(s)</p>
+                        <p className="text-xs text-green-600 font-medium">Items</p>
+                        <p className="font-medium text-green-800 text-sm">{invoice.items?.length || 0} item(s)</p>
                       </div>
                       <div className="bg-gradient-to-r from-yellow-50 to-orange-50 p-3 rounded-lg">
-                        <p className="text-sm text-orange-600 font-medium">Total Amount</p>
+                        <p className="text-xs text-orange-600 font-medium">Total Amount</p>
                         <p className="font-medium text-lg flex items-center gap-1 text-orange-800">
                           <IndianRupee className="h-4 w-4" />
                           {(invoice.total || 0).toFixed(2)}
@@ -869,7 +773,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
               <div>
                 <h4 className="font-medium mb-2 text-purple-800">Items</h4>
                 <div className="border rounded-lg overflow-hidden shadow-md">
-                  <table className="w-full">
+                  <table className="w-full text-sm">
                     <thead className="bg-gradient-to-r from-purple-500 to-blue-500 text-white">
                       <tr>
                         <th className="text-left p-3">Item</th>
