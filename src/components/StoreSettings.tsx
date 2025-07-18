@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -242,7 +243,7 @@ const StoreSettings = () => {
               placeholder="upi://pay?pa=your@upi&pn=Your+Name&tn=Payment&am=${amount}&cu=INR"
             />
             <p className="text-sm text-gray-500 mt-1">
-              Use ${amount} as placeholder for the invoice amount
+              Use $&#123;amount&#125; as placeholder for the invoice amount
             </p>
           </div>
 
