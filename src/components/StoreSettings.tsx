@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,7 +52,8 @@ const StoreSettings = () => {
         const parsed = JSON.parse(savedUpiSettings);
         setUpiSettings(parsed);
         if (parsed.upiString) {
-          const qrUrl = generateQRCodeDataURL(parsed.upiString.replace('${amount}', '100'), 200);
+          const previewAmount = 100; // Use 100 as preview amount
+          const qrUrl = generateQRCodeDataURL(parsed.upiString.replace('${amount}', previewAmount.toString()), 200);
           setUpiSettings(prev => ({ ...prev, qrCodeUrl: qrUrl }));
         }
       } catch (e) {
@@ -76,9 +76,10 @@ const StoreSettings = () => {
     }));
 
     if (field === 'upiString') {
-      // Generate QR code preview
+      // Generate QR code preview with ₹100 as sample amount
       try {
-        const qrUrl = generateQRCodeDataURL(value.replace('${amount}', '100'), 200);
+        const previewAmount = 100;
+        const qrUrl = generateQRCodeDataURL(value.replace('${amount}', previewAmount.toString()), 200);
         setUpiSettings(prev => ({ ...prev, qrCodeUrl: qrUrl }));
       } catch (e) {
         console.error('Error generating QR code:', e);
