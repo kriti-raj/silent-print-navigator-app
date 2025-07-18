@@ -312,8 +312,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
 
   const filteredInvoices = invoices.filter(invoice => {
     const matchesSearch = invoice.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         invoice.customerDetails?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         invoice.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase());
+                         invoice.customerDetails?.name?.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesTab = activeTab === 'all' || invoice.status === activeTab;
     
@@ -395,7 +394,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
                         <div>
                           <CardTitle className="text-lg">Invoice #{invoice.invoiceNumber}</CardTitle>
                           <CardDescription>
-                            {invoice.customerDetails?.name || invoice.customer?.name} • {new Date(invoice.date).toLocaleDateString()}
+                            {invoice.customerDetails?.name} • {new Date(invoice.date).toLocaleDateString()}
                           </CardDescription>
                         </div>
                       </div>
@@ -421,8 +420,8 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <p className="text-sm text-muted-foreground">Customer</p>
-                        <p className="font-medium">{invoice.customerDetails?.name || invoice.customer?.name}</p>
-                        <p className="text-sm text-muted-foreground">{invoice.customerDetails?.phone || invoice.customer?.phone}</p>
+                        <p className="font-medium">{invoice.customerDetails?.name}</p>
+                        <p className="text-sm text-muted-foreground">{invoice.customerDetails?.phone}</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Items</p>
