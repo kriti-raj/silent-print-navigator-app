@@ -56,7 +56,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'today' | 'paid' | 'pending' | 'overdue'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'today' | 'paid' | 'pending' | 'overdue'>('today');
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   const { toast } = useToast();
 
@@ -340,7 +340,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
   };
 
   const viewInvoice = (invoice: Invoice) => {
-    const upiQRUrl = generateUPIQR(invoice.total, invoice.storeInfo);
+    const upiQRUrl = (invoice as any).savedQRCode || generateUPIQR(invoice.total, invoice.storeInfo);
     const htmlContent = generateInvoiceHTML(invoice, upiQRUrl);
 
     const newWindow = window.open('', '_blank');
@@ -352,7 +352,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
 
   const printInvoice = async (invoice: Invoice) => {
     try {
-      const upiQRUrl = generateUPIQR(invoice.total, invoice.storeInfo);
+      const upiQRUrl = (invoice as any).savedQRCode || generateUPIQR(invoice.total, invoice.storeInfo);
       const htmlContent = generateInvoiceHTML(invoice, upiQRUrl);
 
       // Save to file system
@@ -492,6 +492,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
             variant={filterStatus === 'today' ? 'default' : 'outline'}
             onClick={() => setFilterStatus('today')}
             size="sm"
+            className={filterStatus === 'today' ? 'bg-primary text-primary-foreground' : ''}
           >
             Today
           </Button>

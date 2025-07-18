@@ -212,6 +212,9 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     const savedInvoices = JSON.parse(localStorage.getItem('invoices') || '[]');
     const currentStoreInfo = getCurrentStoreSettings();
     
+    // Generate and save QR code with the invoice
+    const upiQRUrl = includePaymentQR ? generateUPIQR(total) : '';
+    
     const invoiceToSave = {
       id: invoiceId,
       invoiceNumber,
@@ -222,10 +225,11 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       subtotal,
       tax,
       total,
-      status: paymentStatus === 'paid' ? 'paid' as const : 'pending' as const,
+      status: paymentStatus, // Use the actual payment status selected
       notes,
       watermarkId: '',
-      gstEnabled
+      gstEnabled,
+      savedQRCode: upiQRUrl // Save the QR code with the invoice
     };
 
     const existingIndex = savedInvoices.findIndex((inv: any) => inv.id === invoiceId);
@@ -507,7 +511,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       
       const savedInvoice = saveInvoice();
       const currentStoreInfo = getCurrentStoreSettings();
-      const upiQRUrl = includePaymentQR ? generateUPIQR(total) : '';
+      const upiQRUrl = savedInvoice.savedQRCode || '';
 
       const htmlContent = generateInvoiceHTML(savedInvoice, currentStoreInfo, upiQRUrl);
 
@@ -551,6 +555,11 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
         variant: "destructive"
       });
     }
+  };
+
+  const handleSaveOnly = () => {
+    saveInvoice();
+    onClose();
   };
 
   return (
@@ -886,11 +895,17 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
             Cancel
           </Button>
           <Button 
+            onClick={handleSaveOnly} 
+            className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white px-8"
+          >
+            Save Invoice
+          </Button>
+          <Button 
             onClick={handlePrint} 
             className="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white px-8"
           >
             <Printer className="mr-2 h-4 w-4" />
-            Print Invoice
+            Save & Print
           </Button>
         </div>
       </div>
