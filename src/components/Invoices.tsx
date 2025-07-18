@@ -73,51 +73,22 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
   const [showTodayOnly, setShowTodayOnly] = useState(true);
   const { toast } = useToast();
 
-  const getCurrentStoreSettings = (): StoreSettings => {
+  const getCurrentStoreSettings = (): { name: string; address: string; phone: string; email: string; taxId: string; website: string; logo?: string; paymentQR?: string; } => {
     console.log('Getting current store settings in Invoices...');
     
-    const possibleKeys = ['storeInfo', 'storeSettings', 'store_settings', 'businessSettings'];
+    const storeInfo = localStorage.getItem('storeInfo');
     let storeSettings: StoreSettings = {};
     
-    for (const key of possibleKeys) {
-      const settings = localStorage.getItem(key);
-      if (settings) {
-        try {
-          const parsed = JSON.parse(settings);
-          storeSettings = {
-            businessName: parsed.businessName || parsed.name,
-            name: parsed.name || parsed.businessName,
-            address: parsed.address,
-            phone: parsed.phone,
-            email: parsed.email,
-            gstNumber: parsed.gstNumber || parsed.taxId,
-            taxId: parsed.taxId || parsed.gstNumber,
-            website: parsed.website,
-            logo: parsed.logo,
-            paymentQR: parsed.paymentQR
-          };
-          console.log(`Found store settings in key: ${key}`, storeSettings);
-          break;
-        } catch (e) {
-          console.error(`Error parsing settings from key ${key}:`, e);
-        }
+    if (storeInfo) {
+      try {
+        storeSettings = JSON.parse(storeInfo);
+        console.log('Found store settings:', storeSettings);
+      } catch (e) {
+        console.error('Error parsing store settings:', e);
       }
     }
     
-    if (Object.keys(storeSettings).length === 0) {
-      console.log('No store settings found, using defaults');
-      storeSettings = {
-        businessName: 'Your Business Name',
-        address: 'Your Business Address',
-        phone: '+91 00000 00000',
-        email: 'your@email.com',
-        gstNumber: 'GST000000000',
-        website: 'www.yourbusiness.com',
-        logo: '',
-        paymentQR: ''
-      };
-    }
-    
+    // Return object with required properties and defaults
     const finalSettings = {
       name: storeSettings.businessName || storeSettings.name || 'Your Business Name',
       address: storeSettings.address || 'Your Business Address',
@@ -198,7 +169,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
       subtotal: Number(invoice.subtotal) || 0,
       tax: Number(invoice.tax) || 0,
       total: Number(invoice.total) || 0,
-      status: invoice.status || 'draft',
+      status: invoice.status || 'paid',
       notes: invoice.notes || '',
       watermarkId: invoice.watermarkId || '',
       gstEnabled: invoice.gstEnabled !== undefined ? invoice.gstEnabled : true
@@ -264,10 +235,10 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
     
     const printerSettings = JSON.parse(localStorage.getItem('printerSettings') || '{}');
     const paperSize = printerSettings.paperSize || 'A4';
-    const margins = printerSettings.margins || 10;
+    const margins = printerSettings.margins || 5;
     const template = printerSettings.template || 'normal';
 
-    // Compact thermal template
+    // Ultra compact thermal template for receipts
     if (template === 'thermal') {
       return `
         <!DOCTYPE html>
@@ -276,58 +247,61 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
             <title>Invoice ${invoice.invoiceNumber}</title>
             <style>
               @media print { 
-                @page { margin: 5mm; size: 80mm auto; }
-                body { -webkit-print-color-adjust: exact; }
+                @page { margin: 2mm; size: 80mm auto; }
+                body { -webkit-print-color-adjust: exact; color-adjust: exact; }
               }
+              * { margin: 0; padding: 0; box-sizing: border-box; }
               body { 
-                font-family: monospace; 
-                font-size: 12px; 
-                line-height: 1.2; 
-                margin: 0; 
-                padding: 5px;
-                max-width: 280px;
+                font-family: 'Courier New', monospace; 
+                font-size: 10px; 
+                line-height: 1.1; 
+                max-width: 72mm;
+                padding: 2mm;
               }
               .center { text-align: center; }
               .bold { font-weight: bold; }
-              .line { border-bottom: 1px dashed #000; margin: 3px 0; }
-              .row { display: flex; justify-content: space-between; margin: 2px 0; }
-              .total-row { font-weight: bold; font-size: 14px; }
-              .qr { text-align: center; margin: 10px 0; }
-              .qr img { width: 80px; height: 80px; }
+              .line { border-bottom: 1px dashed #000; margin: 1mm 0; height: 1px; }
+              .row { display: flex; justify-content: space-between; margin: 0.5mm 0; }
+              .total-row { font-weight: bold; font-size: 11px; border-top: 1px solid #000; padding-top: 1mm; }
+              .qr { text-align: center; margin: 2mm 0; }
+              .qr img { width: 60px; height: 60px; }
+              .item { margin: 0.5mm 0; }
             </style>
           </head>
           <body>
-            <div class="center bold">${currentStoreInfo.name}</div>
-            <div class="center">${currentStoreInfo.phone}</div>
+            <div class="center bold" style="font-size: 12px;">${currentStoreInfo.name}</div>
+            <div class="center" style="font-size: 8px;">${currentStoreInfo.phone}</div>
             <div class="line"></div>
-            <div class="row"><span>Invoice:</span><span>${invoice.invoiceNumber}</span></div>
-            <div class="row"><span>Date:</span><span>${new Date(invoice.date).toLocaleDateString()}</span></div>
-            <div class="row"><span>Customer:</span><span>${invoice.customerDetails.name}</span></div>
+            <div class="row"><span>INV:</span><span>${invoice.invoiceNumber}</span></div>
+            <div class="row"><span>Date:</span><span>${new Date(invoice.date).toLocaleDateString('en-IN')}</span></div>
+            <div class="row"><span>To:</span><span>${invoice.customerDetails.name}</span></div>
             <div class="line"></div>
             ${invoice.items.map(item => `
-              <div>${item.productName}${item.colorCode ? ` - ${item.colorCode}` : ''}</div>
-              <div class="row">
-                <span>${item.quantity} x ₹${item.rate.toFixed(2)}</span>
-                <span>₹${item.total.toFixed(2)}</span>
+              <div class="item">
+                <div style="font-size: 9px;">${item.productName}${item.colorCode ? `-${item.colorCode}` : ''}</div>
+                <div class="row">
+                  <span>${item.quantity} x ${item.rate}</span>
+                  <span>${item.total}</span>
+                </div>
               </div>
             `).join('')}
             <div class="line"></div>
-            <div class="row"><span>Subtotal:</span><span>₹${invoice.subtotal.toFixed(2)}</span></div>
-            ${invoice.gstEnabled ? `<div class="row"><span>GST (18%):</span><span>₹${invoice.tax.toFixed(2)}</span></div>` : ''}
-            <div class="row total-row"><span>TOTAL:</span><span>₹${invoice.total.toFixed(2)}</span></div>
+            <div class="row"><span>Subtotal:</span><span>${invoice.subtotal}</span></div>
+            ${invoice.gstEnabled ? `<div class="row"><span>GST:</span><span>${invoice.tax}</span></div>` : ''}
+            <div class="row total-row"><span>TOTAL:</span><span>₹${invoice.total}</span></div>
             ${upiQRUrl ? `
               <div class="qr">
-                <div>Scan to Pay</div>
-                <img src="${upiQRUrl}" alt="Payment QR" />
+                <div style="font-size: 8px;">Scan to Pay</div>
+                <img src="${upiQRUrl}" alt="Pay" />
               </div>
             ` : ''}
-            <div class="center">Thank you!</div>
+            <div class="center" style="font-size: 8px; margin-top: 2mm;">Thank you!</div>
           </body>
         </html>
       `;
     }
 
-    // Improved compact normal template
+    // Compact A4 template that fits on one page
     return `
       <!DOCTYPE html>
       <html>
@@ -336,85 +310,93 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
           <style>
             @media print { 
               @page { margin: ${margins}mm; size: ${paperSize}; }
-              body { -webkit-print-color-adjust: exact; }
-              .no-print { display: none; }
+              body { -webkit-print-color-adjust: exact; color-adjust: exact; }
             }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
             body { 
               font-family: Arial, sans-serif; 
-              margin: 0; 
-              padding: 15px;
-              font-size: 12px;
-              line-height: 1.3;
+              font-size: 11px;
+              line-height: 1.2;
+              max-width: 100%;
+              height: 100vh;
+              display: flex;
+              flex-direction: column;
             }
             .header { 
               text-align: center; 
-              padding: 15px 0;
-              border-bottom: 2px solid #333;
-              margin-bottom: 15px;
+              padding: 8px 0;
+              border-bottom: 1px solid #333;
+              margin-bottom: 8px;
             }
-            .store-name { font-size: 20px; font-weight: bold; margin-bottom: 5px; }
-            .store-details { font-size: 11px; margin: 2px 0; }
+            .store-name { font-size: 16px; font-weight: bold; margin-bottom: 2px; }
+            .store-details { font-size: 9px; margin: 1px 0; }
             .invoice-info { 
               display: grid; 
               grid-template-columns: 1fr 1fr; 
-              gap: 20px; 
-              margin-bottom: 15px; 
+              gap: 15px; 
+              margin-bottom: 8px; 
+              font-size: 10px;
             }
-            .section-title { font-weight: bold; font-size: 13px; margin-bottom: 5px; border-bottom: 1px solid #ccc; }
-            .info-line { margin: 3px 0; font-size: 11px; }
+            .section-title { font-weight: bold; font-size: 11px; margin-bottom: 3px; }
+            .info-line { margin: 1px 0; }
             .items-table { 
               width: 100%; 
               border-collapse: collapse; 
-              margin: 15px 0;
-              font-size: 11px;
+              margin: 8px 0;
+              font-size: 10px;
+              flex-grow: 1;
             }
             .items-table th, .items-table td { 
-              padding: 6px 4px; 
+              padding: 3px 2px; 
               border-bottom: 1px solid #ddd;
               text-align: left;
             }
             .items-table th { 
-              background: #f5f5f5; 
+              background: #f0f0f0; 
               font-weight: bold; 
+              font-size: 9px;
             }
             .footer-section { 
-              display: grid; 
-              grid-template-columns: auto 1fr; 
-              gap: 20px; 
-              margin-top: 15px;
-              align-items: start;
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-end;
+              margin-top: auto;
+              padding-top: 8px;
+              border-top: 1px solid #ddd;
             }
             .qr-section { 
               text-align: center;
-              max-width: 120px;
+              max-width: 80px;
             }
             .qr-section img { 
-              width: 100px; 
-              height: 100px; 
+              width: 70px; 
+              height: 70px; 
             }
             .totals { 
               text-align: right;
-              font-size: 12px;
+              font-size: 11px;
+              min-width: 150px;
             }
             .total-row { 
               display: flex; 
               justify-content: space-between; 
-              margin: 4px 0; 
-              padding: 2px 0;
+              margin: 2px 0; 
+              padding: 1px 0;
             }
             .final-total { 
               font-weight: bold; 
-              font-size: 14px; 
-              border-top: 2px solid #333; 
-              padding-top: 6px;
-              margin-top: 6px;
+              font-size: 12px; 
+              border-top: 1px solid #333; 
+              padding-top: 3px;
+              margin-top: 3px;
             }
             .notes { 
-              margin: 15px 0; 
-              padding: 10px; 
+              margin: 4px 0; 
+              padding: 4px; 
               background: #f9f9f9; 
-              border-left: 3px solid #ccc;
-              font-size: 11px;
+              font-size: 9px;
+              max-height: 30px;
+              overflow: hidden;
             }
           </style>
         </head>
@@ -422,41 +404,38 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
           <div class="header">
             <div class="store-name">${currentStoreInfo.name}</div>
             <div class="store-details">${currentStoreInfo.address}</div>
-            <div class="store-details">Phone: ${currentStoreInfo.phone} | Email: ${currentStoreInfo.email}</div>
-            <div class="store-details">GST No: ${currentStoreInfo.taxId}</div>
+            <div class="store-details">${currentStoreInfo.phone} | ${currentStoreInfo.email}</div>
           </div>
           
           <div class="invoice-info">
             <div>
               <div class="section-title">Invoice Details</div>
-              <div class="info-line"><strong>Invoice #:</strong> ${invoice.invoiceNumber}</div>
-              <div class="info-line"><strong>Date:</strong> ${new Date(invoice.date).toLocaleDateString()}</div>
-              <div class="info-line"><strong>Status:</strong> ${invoice.status}</div>
+              <div class="info-line"><strong>#:</strong> ${invoice.invoiceNumber}</div>
+              <div class="info-line"><strong>Date:</strong> ${new Date(invoice.date).toLocaleDateString('en-IN')}</div>
             </div>
             <div>
-              <div class="section-title">Customer Details</div>
+              <div class="section-title">Customer</div>
               <div class="info-line"><strong>Name:</strong> ${invoice.customerDetails.name}</div>
               <div class="info-line"><strong>Phone:</strong> ${invoice.customerDetails.phone}</div>
-              <div class="info-line"><strong>Address:</strong> ${invoice.customerDetails.address}</div>
             </div>
           </div>
           
           <table class="items-table">
             <thead>
               <tr>
-                <th>Item Description</th>
-                <th style="width: 60px;">Qty</th>
-                <th style="width: 80px;">Rate</th>
-                <th style="width: 90px;">Total</th>
+                <th>Item</th>
+                <th style="width: 40px;">Qty</th>
+                <th style="width: 60px;">Rate</th>
+                <th style="width: 70px;">Total</th>
               </tr>
             </thead>
             <tbody>
               ${invoice.items.map(item => `
                 <tr>
-                  <td>${item.productName}${item.colorCode ? ` - ${item.colorCode}` : ''}${item.volume ? ` - ${item.volume}` : ''}</td>
+                  <td>${item.productName}${item.colorCode ? `-${item.colorCode}` : ''}${item.volume ? `-${item.volume}` : ''}</td>
                   <td style="text-align: center;">${item.quantity}</td>
-                  <td style="text-align: right;">₹${item.rate.toFixed(2)}</td>
-                  <td style="text-align: right; font-weight: bold;">₹${item.total.toFixed(2)}</td>
+                  <td style="text-align: right;">₹${item.rate}</td>
+                  <td style="text-align: right; font-weight: bold;">₹${item.total}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -465,26 +444,25 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
           <div class="footer-section">
             ${upiQRUrl ? `
               <div class="qr-section">
-                <div style="font-size: 11px; margin-bottom: 5px;">Scan to Pay</div>
-                <img src="${upiQRUrl}" alt="Payment QR" />
-                <div style="font-size: 10px; margin-top: 3px;">₹${invoice.total.toFixed(2)}</div>
+                <div style="font-size: 8px; margin-bottom: 2px;">Scan to Pay</div>
+                <img src="${upiQRUrl}" alt="QR" />
               </div>
             ` : '<div></div>'}
             
             <div class="totals">
               <div class="total-row">
                 <span>Subtotal:</span>
-                <span>₹${invoice.subtotal.toFixed(2)}</span>
+                <span>₹${invoice.subtotal}</span>
               </div>
               ${invoice.gstEnabled ? `
                 <div class="total-row">
-                  <span>GST (18%):</span>
-                  <span>₹${invoice.tax.toFixed(2)}</span>
+                  <span>GST:</span>
+                  <span>₹${invoice.tax}</span>
                 </div>
               ` : ''}
               <div class="total-row final-total">
                 <span>Total:</span>
-                <span>₹${invoice.total.toFixed(2)}</span>
+                <span>₹${invoice.total}</span>
               </div>
             </div>
           </div>
@@ -494,10 +472,6 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateNew, highlightInvoiceId }) 
               <strong>Notes:</strong> ${invoice.notes}
             </div>
           ` : ''}
-          
-          <div style="text-align: center; margin-top: 20px; font-size: 11px;">
-            Thank you for your business!
-          </div>
         </body>
       </html>
     `;
