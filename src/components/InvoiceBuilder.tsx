@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Save, X, User, Package, FileText, QrCode, IndianRupee } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import QRCode from 'qrcode.react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   Dialog,
   DialogContent,
@@ -665,7 +665,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
                 Generate QR Code
               </Button>
               {savedQRCode && (
-                <QRCode value={savedQRCode} size={256} level="H" />
+                <QRCodeSVG value={savedQRCode} size={256} level="H" />
               )}
             </CardContent>
           </Card>
