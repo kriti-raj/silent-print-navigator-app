@@ -14,7 +14,7 @@ import { FileText, Users, Package, Plus, Eye, Calendar } from "lucide-react";
 const Index = () => {
   const [activeView, setActiveView] = useState<'dashboard' | 'invoice'>('dashboard');
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [newInvoiceId, setNewInvoiceId] = useState<string | undefined>();
+  const [editInvoiceId, setEditInvoiceId] = useState<string | undefined>();
   const [storeInfo, setStoreInfo] = useState<any>({});
   const [dashboardStats, setDashboardStats] = useState({
     totalInvoices: 0,
@@ -65,14 +65,18 @@ const Index = () => {
   };
 
   const handleCreateInvoice = () => {
+    setEditInvoiceId(undefined);
     setActiveView('invoice');
   };
 
-  const handleInvoiceClose = (invoiceId?: string) => {
+  const handleEditInvoice = (invoiceId: string) => {
+    setEditInvoiceId(invoiceId);
+    setActiveView('invoice');
+  };
+
+  const handleInvoiceClose = () => {
     setActiveView('dashboard');
-    if (invoiceId) {
-      setNewInvoiceId(invoiceId);
-    }
+    setEditInvoiceId(undefined);
     // Recalculate stats when returning from invoice creation
     calculateDashboardStats();
   };
@@ -94,7 +98,7 @@ const Index = () => {
   };
 
   if (activeView === 'invoice') {
-    return <InvoiceBuilder onClose={handleInvoiceClose} />;
+    return <InvoiceBuilder onClose={handleInvoiceClose} editInvoiceId={editInvoiceId} />;
   }
 
   return (
@@ -241,7 +245,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="invoices" className="space-y-6">
-            <Invoices onCreateNew={handleCreateInvoice} highlightInvoiceId={newInvoiceId} />
+            <Invoices onCreateInvoice={handleCreateInvoice} onEditInvoice={handleEditInvoice} />
           </TabsContent>
 
           <TabsContent value="products" className="space-y-6">
