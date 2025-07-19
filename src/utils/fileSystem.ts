@@ -1,4 +1,7 @@
 
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Capacitor } from '@capacitor/core';
+
 export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string) => {
   try {
     const currentDate = new Date();
@@ -6,7 +9,42 @@ export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string)
     const month = String(currentDate.getMonth() + 1).padStart(2, '0');
     const day = String(currentDate.getDate()).padStart(2, '0');
     
-    // Simulate file system structure in localStorage
+    const fileName = `Invoice_${invoiceNumber}.html`;
+    const folderPath = `Invoices/${year}/${month}/${day}`;
+    const fullPath = `${folderPath}/${fileName}`;
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        // Create directory structure for native platforms
+        await Filesystem.mkdir({
+          path: folderPath,
+          directory: Directory.Documents,
+          recursive: true
+        });
+
+        // Write file to native filesystem
+        await Filesystem.writeFile({
+          path: fullPath,
+          data: htmlContent,
+          directory: Directory.Documents,
+          encoding: Encoding.UTF8
+        });
+
+        console.log(`Invoice ${invoiceNumber} saved to native folder: ${folderPath}`);
+        
+        return {
+          success: true,
+          folderPath: folderPath,
+          fileName,
+          nativePath: true
+        };
+      } catch (nativeError) {
+        console.error('Native file system error, falling back to localStorage:', nativeError);
+        // Fall back to localStorage if native filesystem fails
+      }
+    }
+
+    // Fallback to localStorage for web or if native fails
     const savedInvoices = JSON.parse(localStorage.getItem('savedInvoicePDFs') || '{}');
     
     // Create folder structure
@@ -15,18 +53,17 @@ export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string)
     if (!savedInvoices[year][month][day]) savedInvoices[year][month][day] = {};
     
     // Save invoice content with proper file name
-    const fileName = `Invoice_${invoiceNumber}.html`;
     savedInvoices[year][month][day][invoiceNumber] = {
       fileName,
       content: htmlContent,
       timestamp: currentDate.toISOString(),
-      folderPath: `Invoices/${year}/${month}/${day}/`,
-      fullPath: `Invoices/${year}/${month}/${day}/${fileName}`
+      folderPath: folderPath,
+      fullPath: fullPath
     };
     
     localStorage.setItem('savedInvoicePDFs', JSON.stringify(savedInvoices));
     
-    console.log(`Invoice ${invoiceNumber} saved to folder: Invoices/${year}/${month}/${day}/`);
+    console.log(`Invoice ${invoiceNumber} saved to folder: ${folderPath}`);
     console.log(`File name: ${fileName}`);
     
     // For web environment, create a downloadable file
@@ -36,15 +73,16 @@ export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string)
     link.href = url;
     link.download = fileName;
     
-    // Simulate saving to Downloads folder
-    // link.click(); // Uncomment this line if you want to actually download files
+    // Auto-download for web users
+    link.click();
     
     URL.revokeObjectURL(url);
     
     return {
       success: true,
-      folderPath: `Invoices/${year}/${month}/${day}/`,
-      fileName
+      folderPath: folderPath,
+      fileName,
+      nativePath: false
     };
   } catch (error) {
     console.error('Error saving invoice PDF:', error);

@@ -101,12 +101,122 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
   };
 
   const viewInvoice = (invoice: Invoice) => {
-    // Implement view invoice logic here
     console.log('View invoice:', invoice);
-    toast({
-      title: "View Invoice",
-      description: `Viewing invoice ${invoice.invoiceNumber}.`,
-    });
+    
+    // Generate and open invoice HTML in new window
+    const currentStoreInfo = JSON.parse(localStorage.getItem('storeInfo') || '{}');
+    const upiQRUrl = invoice.savedQRCode || '';
+    
+    const htmlContent = generateInvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
+    
+    const newWindow = window.open('', '_blank', 'width=800,height=600');
+    if (newWindow) {
+      newWindow.document.write(htmlContent);
+      newWindow.document.close();
+    }
+  };
+
+  const generateInvoiceHTML = (invoice: Invoice, storeInfo: any, upiQRUrl: string) => {
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Invoice ${invoice.invoiceNumber}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            .header { text-align: center; margin-bottom: 30px; }
+            .invoice-details { display: flex; justify-content: space-between; margin-bottom: 20px; }
+            .customer-details { margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            .totals { text-align: right; margin-top: 20px; }
+            .footer { text-align: center; margin-top: 30px; color: #666; }
+            .qr { text-align: center; margin: 20px 0; }
+            .qr img { width: 150px; height: 150px; }
+            @media print { 
+              body { margin: 0; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>${storeInfo.name || 'Store Name'}</h1>
+            <p>${storeInfo.address || 'Store Address'}</p>
+            <p>${storeInfo.phone || 'Phone'} | ${storeInfo.email || 'Email'}</p>
+            ${storeInfo.taxId ? `<p>GST: ${storeInfo.taxId}</p>` : ''}
+          </div>
+          
+          <div class="invoice-details">
+            <div><strong>Invoice #:</strong> ${invoice.invoiceNumber}</div>
+            <div><strong>Date:</strong> ${new Date(invoice.date).toLocaleDateString()}</div>
+          </div>
+          
+          <div class="customer-details">
+            <h3>Bill To:</h3>
+            <p><strong>${invoice.customerDetails.name}</strong></p>
+            <p>${invoice.customerDetails.address}</p>
+            <p>Phone: ${invoice.customerDetails.phone}</p>
+            ${invoice.customerDetails.email ? `<p>Email: ${invoice.customerDetails.email}</p>` : ''}
+          </div>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Color Code</th>
+                <th>Volume</th>
+                <th>Quantity</th>
+                <th>Rate</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${invoice.items.map(item => `
+                <tr>
+                  <td>${item.productName}</td>
+                  <td>${item.colorCode || '-'}</td>
+                  <td>${item.volume || '-'}</td>
+                  <td>${item.quantity}</td>
+                  <td>₹${item.rate.toFixed(2)}</td>
+                  <td>₹${item.total.toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <div class="totals">
+            <div>Subtotal: ₹${invoice.subtotal.toFixed(2)}</div>
+            ${invoice.gstEnabled ? `<div>GST (18%): ₹${invoice.tax.toFixed(2)}</div>` : ''}
+            <div style="font-size: 1.2em; font-weight: bold;">Total: ₹${invoice.total.toFixed(2)}</div>
+          </div>
+          
+          ${upiQRUrl ? `
+            <div class="qr">
+              <h4>Scan to Pay</h4>
+              <img src="${upiQRUrl}" alt="UPI QR Code" />
+            </div>
+          ` : ''}
+          
+          ${invoice.notes ? `
+            <div style="margin-top: 20px;">
+              <h4>Notes:</h4>
+              <p>${invoice.notes}</p>
+            </div>
+          ` : ''}
+          
+          <div class="footer">
+            <p>Thank you for your business!</p>
+            <p>Generated on ${new Date().toLocaleString()}</p>
+          </div>
+          
+          <div class="no-print" style="margin-top: 20px; text-align: center;">
+            <button onclick="window.print()" style="padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Print Invoice</button>
+          </div>
+        </body>
+      </html>
+    `;
   };
 
   const getTotalRevenue = () => {
@@ -133,7 +243,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-1">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Invoices</CardTitle>
@@ -141,33 +251,6 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{invoices.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₹{getTotalRevenue().toFixed(2)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Paid</CardTitle>
-            <DollarSign className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">₹{getPaidRevenue().toFixed(2)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Unpaid</CardTitle>
-            <DollarSign className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">₹{getUnpaidRevenue().toFixed(2)}</div>
           </CardContent>
         </Card>
       </div>

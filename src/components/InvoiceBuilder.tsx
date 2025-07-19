@@ -544,31 +544,29 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
       const currentStoreInfo = getCurrentStoreSettings();
       const upiQRUrl = savedInvoice.savedQRCode || '';
 
-      const htmlContent = generateInvoiceHTML(savedInvoice, currentStoreInfo, upiQRUrl);
+      let htmlContent;
+      if (currentStoreInfo.printFormat === 'thermal') {
+        htmlContent = generateThermalInvoiceHTML(savedInvoice, currentStoreInfo, upiQRUrl);
+      } else {
+        htmlContent = generateInvoiceHTML(savedInvoice, currentStoreInfo, upiQRUrl);
+      }
 
       // Save to local file system
       await saveInvoicePDF(invoiceNumber, htmlContent);
 
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'absolute';
-      iframe.style.left = '-9999px';
-      iframe.style.width = '0px';
-      iframe.style.height = '0px';
-      
-      document.body.appendChild(iframe);
-      
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (iframeDoc) {
-        iframeDoc.open();
-        iframeDoc.write(htmlContent);
-        iframeDoc.close();
+      // Create a new window for printing
+      const printWindow = window.open('', '_blank', 'width=800,height=600');
+      if (printWindow) {
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
         
-        setTimeout(() => {
-          iframe.contentWindow?.print();
+        // Wait for content to load then print
+        printWindow.onload = () => {
           setTimeout(() => {
-            document.body.removeChild(iframe);
-          }, 1000);
-        }, 500);
+            printWindow.print();
+            printWindow.close();
+          }, 500);
+        };
         
         toast({
           title: "Invoice Printed & Saved",
@@ -942,6 +940,20 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
             Save & Print
           </Button>
         </div>
+        
+        {/* Print Option after saving */}
+        {editInvoiceId && (
+          <div className="mt-4 text-center">
+            <Button 
+              onClick={handlePrint} 
+              variant="outline"
+              className="border-green-500 text-green-600 hover:bg-green-50"
+            >
+              <Printer className="mr-2 h-4 w-4" />
+              Print Invoice
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
