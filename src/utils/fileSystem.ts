@@ -2,14 +2,7 @@
 // File system utilities for PC/Desktop application
 export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string) => {
   try {
-    const currentDate = new Date();
-    const year = currentDate.getFullYear();
-    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-    const day = String(currentDate.getDate()).padStart(2, '0');
-    
     const fileName = `Invoice_${invoiceNumber}.html`;
-    const folderPath = `Invoices/${year}/${month}/${day}`;
-    const fullPath = `${folderPath}/${fileName}`;
 
     // Check if user has selected a folder
     const folderSelected = localStorage.getItem('folderSelected') === 'true';
@@ -31,35 +24,25 @@ export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string)
       }
     }
 
-    // If we have a folder handle, save to the selected folder
+    // If we have a folder handle, save to the selected folder (no subfolders)
     if (folderHandle) {
       try {
-        // Create nested directories: Invoices/YYYY/MM/DD
-        const invoicesDir = await folderHandle.getDirectoryHandle('Invoices', { create: true });
-        const yearDir = await invoicesDir.getDirectoryHandle(year.toString(), { create: true });
-        const monthDir = await yearDir.getDirectoryHandle(month, { create: true });
-        const dayDir = await monthDir.getDirectoryHandle(day, { create: true });
-
-        // Create and write the file
-        const fileHandle = await dayDir.getFileHandle(fileName, { create: true });
+        // Create and write the file directly in the selected folder
+        const fileHandle = await folderHandle.getFileHandle(fileName, { create: true });
         const writable = await fileHandle.createWritable();
         await writable.write(htmlContent);
         await writable.close();
 
-        console.log(`Invoice ${invoiceNumber} saved to selected folder: ${folderPath}`);
+        console.log(`Invoice ${invoiceNumber} saved to selected folder`);
 
         // Also save to localStorage for app tracking
         const savedInvoices = JSON.parse(localStorage.getItem('savedInvoicePDFs') || '{}');
         
-        if (!savedInvoices[year]) savedInvoices[year] = {};
-        if (!savedInvoices[year][month]) savedInvoices[year][month] = {};
-        if (!savedInvoices[year][month][day]) savedInvoices[year][month][day] = {};
+        if (!savedInvoices.files) savedInvoices.files = {};
         
-        savedInvoices[year][month][day][invoiceNumber] = {
+        savedInvoices.files[invoiceNumber] = {
           fileName: fileName,
-          timestamp: currentDate.toISOString(),
-          folderPath: folderPath,
-          fullPath: fullPath,
+          timestamp: new Date().toISOString(),
           savedLocation: 'selected-folder'
         };
         
@@ -67,7 +50,6 @@ export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string)
 
         return {
           success: true,
-          folderPath: folderPath,
           fileName,
           method: 'filesystem-api'
         };
@@ -77,14 +59,12 @@ export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string)
       }
     }
 
-    // Fallback: Auto-download to Downloads folder with organized naming
-    const organizedFileName = `${year}-${month}-${day}_Invoice_${invoiceNumber}.html`;
-    
+    // Fallback: Auto-download to Downloads folder
     const blob = new Blob([htmlContent], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = organizedFileName;
+    link.download = fileName;
     
     // Make the download silent by hiding the link
     link.style.display = 'none';
@@ -100,27 +80,22 @@ export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string)
     // Also save to localStorage for app tracking
     const savedInvoices = JSON.parse(localStorage.getItem('savedInvoicePDFs') || '{}');
     
-    if (!savedInvoices[year]) savedInvoices[year] = {};
-    if (!savedInvoices[year][month]) savedInvoices[year][month] = {};
-    if (!savedInvoices[year][month][day]) savedInvoices[year][month][day] = {};
+    if (!savedInvoices.files) savedInvoices.files = {};
     
-    savedInvoices[year][month][day][invoiceNumber] = {
-      fileName: organizedFileName,
-      timestamp: currentDate.toISOString(),
-      folderPath: folderPath,
-      fullPath: fullPath,
-      downloadedFileName: organizedFileName,
+    savedInvoices.files[invoiceNumber] = {
+      fileName: fileName,
+      timestamp: new Date().toISOString(),
+      downloadedFileName: fileName,
       savedLocation: 'downloads'
     };
     
     localStorage.setItem('savedInvoicePDFs', JSON.stringify(savedInvoices));
     
-    console.log(`Invoice ${invoiceNumber} downloaded as: ${organizedFileName}`);
+    console.log(`Invoice ${invoiceNumber} downloaded as: ${fileName}`);
     
     return {
       success: true,
-      folderPath: folderPath,
-      fileName: organizedFileName,
+      fileName: fileName,
       method: 'download'
     };
   } catch (error) {
@@ -137,7 +112,7 @@ export const getInvoiceFileStructure = () => {
   return savedInvoices;
 };
 
-export const getInvoicesFromFolder = (year: string, month: string, day: string) => {
+export const getInvoicesFromFolder = () => {
   const savedInvoices = JSON.parse(localStorage.getItem('savedInvoicePDFs') || '{}');
-  return savedInvoices[year]?.[month]?.[day] || {};
+  return savedInvoices.files || {};
 };

@@ -392,33 +392,43 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
         htmlContent = generateA4InvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
       }
 
-      // Save to file system
-      await saveInvoicePDF(invoice.invoiceNumber, htmlContent);
-
       if (currentStoreInfo.silentPrint) {
-        // Silent print - just save and show success
-        toast({
-          title: "Invoice Saved",
-          description: `Invoice ${invoice.invoiceNumber} has been saved successfully.`,
-          className: "bg-green-50 border-green-200 text-green-800"
-        });
-      } else {
-        // Create a new window for printing
+        // Silent print - only show print dialog
         const printWindow = window.open('', '_blank', 'width=800,height=600');
         if (printWindow) {
           printWindow.document.write(htmlContent);
           printWindow.document.close();
           
-          // Wait for content to load then print
           printWindow.onload = () => {
             setTimeout(() => {
+              printWindow.focus();
               printWindow.print();
             }, 500);
           };
           
           toast({
-            title: "Invoice Printed & Saved",
-            description: `Invoice ${invoice.invoiceNumber} has been printed and saved successfully.`,
+            title: "Invoice Printed",
+            description: `Invoice ${invoice.invoiceNumber} has been sent to printer.`,
+            className: "bg-green-50 border-green-200 text-green-800"
+          });
+        }
+      } else {
+        // Regular print - open print dialog
+        const printWindow = window.open('', '_blank', 'width=800,height=600');
+        if (printWindow) {
+          printWindow.document.write(htmlContent);
+          printWindow.document.close();
+          
+          printWindow.onload = () => {
+            setTimeout(() => {
+              printWindow.focus();
+              printWindow.print();
+            }, 500);
+          };
+          
+          toast({
+            title: "Invoice Printed",
+            description: `Invoice ${invoice.invoiceNumber} has been sent to printer.`,
             className: "bg-green-50 border-green-200 text-green-800"
           });
         }
@@ -428,6 +438,38 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
       toast({
         title: "Printing Error",
         description: "An error occurred while printing. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const saveInvoice = async (invoice: Invoice) => {
+    try {
+      console.log('Saving invoice from list...');
+      
+      const currentStoreInfo = getCurrentStoreSettings();
+      const upiQRUrl = invoice.savedQRCode || '';
+
+      let htmlContent;
+      if (currentStoreInfo.printFormat === 'thermal') {
+        htmlContent = generateThermalInvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
+      } else {
+        htmlContent = generateA4InvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
+      }
+
+      // Save to file system
+      await saveInvoicePDF(invoice.invoiceNumber, htmlContent);
+
+      toast({
+        title: "Invoice Saved",
+        description: `Invoice ${invoice.invoiceNumber} has been saved successfully.`,
+        className: "bg-green-50 border-green-200 text-green-800"
+      });
+    } catch (error) {
+      console.error('Saving error:', error);
+      toast({
+        title: "Saving Error",
+        description: "An error occurred while saving. Please try again.",
         variant: "destructive"
       });
     }
@@ -547,6 +589,14 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
                       title="View Invoice"
                     >
                       <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => saveInvoice(invoice)}
+                      title="Save Invoice"
+                    >
+                      <FileText className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="outline"

@@ -547,52 +547,65 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
       }
 
       if (currentStoreInfo.silentPrint) {
-        // Silent print - save file and skip print dialog
-        console.log('Silent printing enabled - saving file only');
-        await saveInvoicePDF(invoiceNumber, htmlContent);
+        // Silent print - only show print dialog, don't save file
+        console.log('Silent printing enabled - opening print dialog only');
         
-        toast({
-          title: "Invoice Saved",
-          description: `Invoice ${invoiceNumber} has been saved successfully.`,
-          className: "bg-green-50 border-green-200 text-green-800"
-        });
-        onClose(savedInvoice.id);
+        const printWindow = window.open('', '_blank', 'width=800,height=600');
+        if (printWindow) {
+          printWindow.document.write(htmlContent);
+          printWindow.document.close();
+          
+          // Wait for content to load then print
+          printWindow.onload = () => {
+            setTimeout(() => {
+              printWindow.focus();
+              printWindow.print();
+              
+              // Close after print
+              setTimeout(() => {
+                printWindow.close();
+              }, 1000);
+            }, 500);
+          };
+          
+          toast({
+            title: "Invoice Printed",
+            description: `Invoice ${invoiceNumber} has been sent to printer.`,
+            className: "bg-green-50 border-green-200 text-green-800"
+          });
+
+          onClose(savedInvoice.id);
+        }
       } else {
-        // Regular print - open print dialog
+        // Regular print - open print dialog without saving
         console.log('Opening print dialog');
         
-        // Save the file first
-        await saveInvoicePDF(invoiceNumber, htmlContent);
-        
-        // Create a new window for printing with a delay to avoid download interference
-        setTimeout(() => {
-          const printWindow = window.open('', '_blank', 'width=800,height=600');
-          if (printWindow) {
-            printWindow.document.write(htmlContent);
-            printWindow.document.close();
-            
-            // Wait for content to load then print
-            printWindow.onload = () => {
+        const printWindow = window.open('', '_blank', 'width=800,height=600');
+        if (printWindow) {
+          printWindow.document.write(htmlContent);
+          printWindow.document.close();
+          
+          // Wait for content to load then print
+          printWindow.onload = () => {
+            setTimeout(() => {
+              printWindow.focus();
+              printWindow.print();
+              
+              // Close after print
               setTimeout(() => {
-                printWindow.focus(); // Bring print window to front
-                printWindow.print();
-                
-                // Close after a delay to ensure print dialog appears
-                setTimeout(() => {
-                  printWindow.close();
-                }, 1000);
-              }, 500);
-            };
-            
-            toast({
-              title: "Invoice Printed & Saved",
-              description: `Invoice ${invoiceNumber} has been printed and saved successfully.`,
-              className: "bg-green-50 border-green-200 text-green-800"
-            });
+                printWindow.close();
+              }, 1000);
+            }, 500);
+          };
+          
+          toast({
+            title: "Invoice Printed",
+            description: `Invoice ${invoiceNumber} has been sent to printer.`,
+            className: "bg-green-50 border-green-200 text-green-800"
+          });
 
-            onClose(savedInvoice.id);
-          }
-        }, 200); // Small delay to let download complete first
+          onClose(savedInvoice.id);
+        }
       }
     } catch (error) {
       console.error('Printing error:', error);
@@ -949,7 +962,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
             className="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white px-8"
           >
             <Printer className="mr-2 h-4 w-4" />
-            Save & Print
+            Print Invoice
           </Button>
         </div>
         
