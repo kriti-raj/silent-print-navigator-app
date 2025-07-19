@@ -25,9 +25,6 @@ const StoreSettings: React.FC<StoreSettingsProps> = () => {
     paymentQR: '',
     printFormat: 'a4'
   });
-  const [upiSettings, setUpiSettings] = useState({
-    upiString: ''
-  });
   const { toast } = useToast();
 
   useEffect(() => {
@@ -39,16 +36,10 @@ const StoreSettings: React.FC<StoreSettingsProps> = () => {
     if (savedStoreInfo) {
       setStoreInfo(JSON.parse(savedStoreInfo));
     }
-
-    const savedUpiSettings = localStorage.getItem('upiSettings');
-    if (savedUpiSettings) {
-      setUpiSettings(JSON.parse(savedUpiSettings));
-    }
   };
 
   const saveSettings = () => {
     localStorage.setItem('storeInfo', JSON.stringify(storeInfo));
-    localStorage.setItem('upiSettings', JSON.stringify(upiSettings));
     toast({
       title: "Settings Saved",
       description: "Your settings have been saved successfully.",
@@ -63,14 +54,10 @@ const StoreSettings: React.FC<StoreSettingsProps> = () => {
       </div>
 
       <Tabs defaultValue="store" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="store" className="flex items-center gap-2">
             <Store className="h-4 w-4" />
             Store Info
-          </TabsTrigger>
-          <TabsTrigger value="payment" className="flex items-center gap-2">
-            <CreditCard className="h-4 w-4" />
-            Payment
           </TabsTrigger>
           <TabsTrigger value="preferences" className="flex items-center gap-2">
             <SettingsIcon className="h-4 w-4" />
@@ -140,28 +127,6 @@ const StoreSettings: React.FC<StoreSettingsProps> = () => {
                     onChange={(e) => setStoreInfo({ ...storeInfo, website: e.target.value })}
                   />
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="payment" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Payment Settings</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="upiString">UPI Payment String</Label>
-                <Input
-                  id="upiString"
-                  value={upiSettings.upiString}
-                  onChange={(e) => setUpiSettings({ ...upiSettings, upiString: e.target.value })}
-                  placeholder="upi://pay?pa=YOUR_UPI_ID&pn=YOUR_NAME&am=${amount}&cu=INR"
-                />
-                <p className="text-sm text-gray-500 mt-2">
-                  Use <code>${'{amount}'}</code> as a placeholder for the invoice amount.
-                </p>
               </div>
             </CardContent>
           </Card>

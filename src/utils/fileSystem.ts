@@ -1,4 +1,3 @@
-
 // File system utilities for PC/Desktop application
 export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string) => {
   try {
@@ -11,30 +10,16 @@ export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string)
     const folderPath = `Invoices/${year}/${month}/${day}`;
     const fullPath = `${folderPath}/${fileName}`;
 
-    // For desktop applications, we'll use the File System Access API if available
-    // Otherwise fall back to automatic downloads with organized folder structure
-    
-    if ('showDirectoryPicker' in window) {
+    // Check if user has already selected a folder
+    const folderSelected = localStorage.getItem('folderSelected') === 'true';
+
+    // For desktop applications, we'll use the File System Access API if available and folder is selected
+    if ('showDirectoryPicker' in window && folderSelected) {
       try {
-        // Use File System Access API for modern browsers
-        const savedFolderHandle = localStorage.getItem('selectedFolderHandle');
-        let dirHandle;
-        
-        if (!savedFolderHandle) {
-          // First time - ask user to select a folder
-          dirHandle = await (window as any).showDirectoryPicker({
-            mode: 'readwrite'
-          });
-          
-          // Store the folder selection preference
-          localStorage.setItem('folderSelected', 'true');
-          console.log('Folder selected for invoice storage');
-        } else {
-          // Try to use the same folder (note: handles can't be serialized, so we'll ask again)
-          dirHandle = await (window as any).showDirectoryPicker({
-            mode: 'readwrite'
-          });
-        }
+        // Try to use previously selected folder (note: we need to ask user again due to security)
+        const dirHandle = await (window as any).showDirectoryPicker({
+          mode: 'readwrite'
+        });
 
         // Create nested directories: Invoices/YYYY/MM/DD
         const invoicesDir = await dirHandle.getDirectoryHandle('Invoices', { create: true });
@@ -49,7 +34,6 @@ export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string)
         await writable.close();
 
         console.log(`Invoice ${invoiceNumber} saved to desktop folder: ${folderPath}`);
-        console.log(`File name: ${fileName}`);
 
         return {
           success: true,
@@ -58,21 +42,21 @@ export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string)
           method: 'filesystem-api'
         };
       } catch (fsError) {
-        console.log('File System Access API failed or cancelled, falling back to download');
+        console.log('File System Access API failed, falling back to download');
         // Fall through to download method
       }
     }
 
     // Fallback: Auto-download to Downloads folder with organized naming
-    const organiziedFileName = `${year}-${month}-${day}_Invoice_${invoiceNumber}.html`;
+    const organizedFileName = `${year}-${month}-${day}_Invoice_${invoiceNumber}.html`;
     
     const blob = new Blob([htmlContent], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = organiziedFileName;
+    link.download = organizedFileName;
     
-    // Auto-download the file
+    // Auto-download the file silently
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -87,22 +71,21 @@ export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string)
     if (!savedInvoices[year][month][day]) savedInvoices[year][month][day] = {};
     
     savedInvoices[year][month][day][invoiceNumber] = {
-      fileName: organiziedFileName,
+      fileName: organizedFileName,
       timestamp: currentDate.toISOString(),
       folderPath: folderPath,
       fullPath: fullPath,
-      downloadedFileName: organiziedFileName
+      downloadedFileName: organizedFileName
     };
     
     localStorage.setItem('savedInvoicePDFs', JSON.stringify(savedInvoices));
     
-    console.log(`Invoice ${invoiceNumber} downloaded as: ${organiziedFileName}`);
-    console.log(`Organized in Downloads folder with date prefix`);
+    console.log(`Invoice ${invoiceNumber} downloaded as: ${organizedFileName}`);
     
     return {
       success: true,
       folderPath: folderPath,
-      fileName: organiziedFileName,
+      fileName: organizedFileName,
       method: 'download'
     };
   } catch (error) {
