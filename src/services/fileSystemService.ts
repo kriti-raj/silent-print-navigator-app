@@ -1,9 +1,4 @@
 
-import { writeFile, mkdir } from 'fs/promises';
-import { join, dirname } from 'path';
-import { app, dialog } from 'electron';
-import { sqliteService } from './sqliteService';
-
 interface SaveResult {
   success: boolean;
   fileName?: string;
@@ -13,7 +8,7 @@ interface SaveResult {
 
 class FileSystemService {
   private static instance: FileSystemService;
-  private selectedFolderPath: string | null = null;
+  private selectedFolderHandle: FileSystemDirectoryHandle | null = null;
 
   constructor() {
     this.loadSelectedFolder();
@@ -27,29 +22,32 @@ class FileSystemService {
   }
 
   private async loadSelectedFolder() {
-    const folderPath = await sqliteService.getStoreSetting('selectedFolderPath');
-    if (folderPath) {
-      this.selectedFolderPath = folderPath;
+    try {
+      // Try to restore the folder handle from IndexedDB
+      const folderPath = localStorage.getItem('selectedFolderPath');
+      if (folderPath) {
+        // In a real implementation, you'd store the handle in IndexedDB
+        // For now, we'll just store the path
+      }
+    } catch (error) {
+      console.error('Error loading selected folder:', error);
     }
   }
 
   async selectFolder(): Promise<{ success: boolean; folderPath?: string; error?: string }> {
     try {
-      const result = await dialog.showOpenDialog({
-        properties: ['openDirectory'],
-        defaultPath: app.getPath('documents'),
-        title: 'Select Invoice Storage Folder'
-      });
-
-      if (result.canceled || !result.filePaths[0]) {
-        return { success: false, error: 'Folder selection cancelled' };
+      if (!('showDirectoryPicker' in window)) {
+        return { success: false, error: 'File System Access API not supported in this browser' };
       }
 
-      this.selectedFolderPath = result.filePaths[0];
-      await sqliteService.saveStoreSetting('selectedFolderPath', this.selectedFolderPath);
-      await sqliteService.saveStoreSetting('folderSelected', 'true');
+      const dirHandle = await (window as any).showDirectoryPicker();
+      this.selectedFolderHandle = dirHandle;
+      
+      // Store the folder path
+      localStorage.setItem('selectedFolderPath', dirHandle.name);
+      localStorage.setItem('folderSelected', 'true');
 
-      return { success: true, folderPath: this.selectedFolderPath };
+      return { success: true, folderPath: dirHandle.name };
     } catch (error) {
       console.error('Error selecting folder:', error);
       return { success: false, error: 'Failed to select folder' };
@@ -59,34 +57,39 @@ class FileSystemService {
   async saveInvoicePDF(invoiceNumber: string, htmlContent: string): Promise<SaveResult> {
     try {
       const fileName = `Invoice_${invoiceNumber}.html`;
-      let filePath: string;
-
-      if (this.selectedFolderPath) {
-        // Save to selected folder
-        filePath = join(this.selectedFolderPath, fileName);
-      } else {
-        // Save to Documents/Invoices folder
-        const documentsPath = app.getPath('documents');
-        const invoicesFolder = join(documentsPath, 'Invoices');
+      
+      if (this.selectedFolderHandle && ('showDirectoryPicker' in window)) {
+        // Use File System Access API
+        const fileHandle = await this.selectedFolderHandle.getFileHandle(fileName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(htmlContent);
+        await writable.close();
         
-        // Create folder if it doesn't exist
-        await mkdir(invoicesFolder, { recursive: true });
-        filePath = join(invoicesFolder, fileName);
+        return {
+          success: true,
+          fileName,
+          filePath: `${this.selectedFolderHandle.name}/${fileName}`
+        };
+      } else {
+        // Fallback to download
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        return {
+          success: true,
+          fileName,
+          filePath: `Downloads/${fileName}`
+        };
       }
-
-      // Write file
-      await writeFile(filePath, htmlContent, 'utf8');
-
-      // Save to database tracking
-      await sqliteService.saveStoreSetting(`invoice_${invoiceNumber}_path`, filePath);
-
-      return {
-        success: true,
-        fileName,
-        filePath
-      };
     } catch (error) {
-      console.error('Error saving invoice PDF:', error);
+      console.error('Error saving invoice:', error);
       return {
         success: false,
         error
@@ -95,18 +98,17 @@ class FileSystemService {
   }
 
   async getSelectedFolderPath(): Promise<string | null> {
-    return this.selectedFolderPath;
+    return localStorage.getItem('selectedFolderPath');
   }
 
   async resetFolderSelection(): Promise<void> {
-    this.selectedFolderPath = null;
-    await sqliteService.saveStoreSetting('selectedFolderPath', '');
-    await sqliteService.saveStoreSetting('folderSelected', 'false');
+    this.selectedFolderHandle = null;
+    localStorage.removeItem('selectedFolderPath');
+    localStorage.setItem('folderSelected', 'false');
   }
 
   async isFolderSelected(): Promise<boolean> {
-    const folderSelected = await sqliteService.getStoreSetting('folderSelected');
-    return folderSelected === 'true';
+    return localStorage.getItem('folderSelected') === 'true';
   }
 }
 

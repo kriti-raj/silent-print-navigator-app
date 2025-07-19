@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Eye, Edit, Trash2, Search, Plus, FileText, Printer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { saveInvoicePDF } from "../utils/fileSystem";
+import { fileSystemService } from "../services/fileSystemService";
 import { sqliteService } from '../services/sqliteService';
 
 interface Invoice {
@@ -129,7 +128,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
         website: settings.website || 'www.yourbusiness.com',
         logo: settings.logo || '',
         paymentQR: settings.paymentQR || '',
-        printFormat: settings.printFormat || 'a4',
+        printFormat: (settings.printFormat === 'thermal' ? 'thermal' : 'a4') as 'a4' | 'thermal',
         silentPrint: settings.silentPrint === 'true'
       };
     } catch (error) {
@@ -141,7 +140,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
         email: 'your@email.com',
         taxId: 'GST000000000',
         website: 'www.yourbusiness.com',
-        printFormat: 'a4',
+        printFormat: 'a4' as 'a4' | 'thermal',
         silentPrint: false
       };
     }
@@ -421,13 +420,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
         printWindow.onload = () => {
           setTimeout(() => {
             printWindow.focus();
-            if (currentStoreInfo.silentPrint) {
-              // Silent print - automatically print without showing dialog
-              printWindow.print();
-            } else {
-              // Normal print - show print dialog
-              printWindow.print();
-            }
+            printWindow.print();
           }, 500);
         };
         
@@ -461,7 +454,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
         htmlContent = generateA4InvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
       }
 
-      const result = await saveInvoicePDF(invoice.invoiceNumber, htmlContent);
+      const result = await fileSystemService.saveInvoicePDF(invoice.invoiceNumber, htmlContent);
 
       if (result.success) {
         toast({

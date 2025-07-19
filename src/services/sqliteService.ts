@@ -1,15 +1,11 @@
 
-import Database from 'better-sqlite3';
-import { join } from 'path';
-import { app } from 'electron';
-
 interface Invoice {
   id: string;
   invoiceNumber: string;
-  customerDetails: string; // JSON string
-  storeInfo: string; // JSON string
+  customerDetails: any;
+  storeInfo: any;
   date: string;
-  items: string; // JSON string
+  items: any[];
   subtotal: number;
   tax: number;
   total: number;
@@ -36,27 +32,19 @@ interface Product {
   basePrice: number;
   category: string;
   hasVariableColors: boolean;
-  predefinedColors: string; // JSON string
-  volumes: string; // JSON string
+  predefinedColors: string[];
+  volumes: any[];
   stockQuantity: number;
   unit: string;
 }
 
-interface StoreSettings {
-  id: string;
-  key: string;
-  value: string;
-}
-
 class SQLiteService {
-  private db: Database.Database;
   private static instance: SQLiteService;
+  private dbName = 'invoice_app_db';
+  private db: IDBDatabase | null = null;
 
   constructor() {
-    // Initialize SQLite database
-    const dbPath = join(app ? app.getPath('userData') : './data', 'invoice_app.db');
-    this.db = new Database(dbPath);
-    this.initializeTables();
+    this.initializeDB();
   }
 
   static getInstance(): SQLiteService {
@@ -66,209 +54,252 @@ class SQLiteService {
     return SQLiteService.instance;
   }
 
-  private initializeTables() {
-    // Create invoices table
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS invoices (
-        id TEXT PRIMARY KEY,
-        invoiceNumber TEXT UNIQUE,
-        customerDetails TEXT,
-        storeInfo TEXT,
-        date TEXT,
-        items TEXT,
-        subtotal REAL,
-        tax REAL,
-        total REAL,
-        status TEXT,
-        notes TEXT,
-        watermarkId TEXT,
-        gstEnabled INTEGER,
-        savedQRCode TEXT
-      )
-    `);
+  private async initializeDB(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.dbName, 1);
 
-    // Create customers table
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS customers (
-        id TEXT PRIMARY KEY,
-        name TEXT,
-        phone TEXT,
-        email TEXT,
-        address TEXT,
-        createdAt TEXT
-      )
-    `);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        this.db = request.result;
+        resolve();
+      };
 
-    // Create products table
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS products (
-        id TEXT PRIMARY KEY,
-        name TEXT,
-        description TEXT,
-        basePrice REAL,
-        category TEXT,
-        hasVariableColors INTEGER,
-        predefinedColors TEXT,
-        volumes TEXT,
-        stockQuantity INTEGER,
-        unit TEXT
-      )
-    `);
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
 
-    // Create store settings table
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS store_settings (
-        id TEXT PRIMARY KEY,
-        key TEXT UNIQUE,
-        value TEXT
-      )
-    `);
+        // Create object stores
+        if (!db.objectStoreNames.contains('invoices')) {
+          db.createObjectStore('invoices', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('customers')) {
+          db.createObjectStore('customers', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('products')) {
+          db.createObjectStore('products', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('store_settings')) {
+          db.createObjectStore('store_settings', { keyPath: 'key' });
+        }
+      };
+    });
+  }
+
+  private async ensureDB(): Promise<IDBDatabase> {
+    if (!this.db) {
+      await this.initializeDB();
+    }
+    return this.db!;
   }
 
   // Invoice methods
   async getInvoices(): Promise<any[]> {
-    const stmt = this.db.prepare('SELECT * FROM invoices ORDER BY date DESC');
-    const rows = stmt.all() as Invoice[];
-    return rows.map(row => ({
-      ...row,
-      customerDetails: JSON.parse(row.customerDetails),
-      storeInfo: JSON.parse(row.storeInfo),
-      items: JSON.parse(row.items),
-      gstEnabled: Boolean(row.gstEnabled)
-    }));
+    const db = await this.ensureDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['invoices'], 'readonly');
+      const store = transaction.objectStore('invoices');
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        const invoices = request.result.map((invoice: any) => ({
+          ...invoice,
+          customerDetails: typeof invoice.customerDetails === 'string' 
+            ? JSON.parse(invoice.customerDetails) 
+            : invoice.customerDetails,
+          storeInfo: typeof invoice.storeInfo === 'string' 
+            ? JSON.parse(invoice.storeInfo) 
+            : invoice.storeInfo,
+          items: typeof invoice.items === 'string' 
+            ? JSON.parse(invoice.items) 
+            : invoice.items
+        }));
+        resolve(invoices);
+      };
+      request.onerror = () => reject(request.error);
+    });
   }
 
   async saveInvoice(invoice: any): Promise<void> {
-    const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO invoices (
-        id, invoiceNumber, customerDetails, storeInfo, date, items,
-        subtotal, tax, total, status, notes, watermarkId, gstEnabled, savedQRCode
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    stmt.run(
-      invoice.id,
-      invoice.invoiceNumber,
-      JSON.stringify(invoice.customerDetails),
-      JSON.stringify(invoice.storeInfo),
-      invoice.date,
-      JSON.stringify(invoice.items),
-      invoice.subtotal,
-      invoice.tax,
-      invoice.total,
-      invoice.status,
-      invoice.notes,
-      invoice.watermarkId,
-      invoice.gstEnabled ? 1 : 0,
-      invoice.savedQRCode
-    );
+    const db = await this.ensureDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['invoices'], 'readwrite');
+      const store = transaction.objectStore('invoices');
+      
+      const invoiceToSave = {
+        ...invoice,
+        customerDetails: typeof invoice.customerDetails === 'string' 
+          ? invoice.customerDetails 
+          : JSON.stringify(invoice.customerDetails),
+        storeInfo: typeof invoice.storeInfo === 'string' 
+          ? invoice.storeInfo 
+          : JSON.stringify(invoice.storeInfo),
+        items: typeof invoice.items === 'string' 
+          ? invoice.items 
+          : JSON.stringify(invoice.items)
+      };
+      
+      const request = store.put(invoiceToSave);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
   }
 
   async deleteInvoice(invoiceId: string): Promise<void> {
-    const stmt = this.db.prepare('DELETE FROM invoices WHERE id = ?');
-    stmt.run(invoiceId);
+    const db = await this.ensureDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['invoices'], 'readwrite');
+      const store = transaction.objectStore('invoices');
+      const request = store.delete(invoiceId);
+      
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
   }
 
   // Customer methods
   async getCustomers(): Promise<any[]> {
-    const stmt = this.db.prepare('SELECT * FROM customers ORDER BY name');
-    return stmt.all();
+    const db = await this.ensureDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['customers'], 'readonly');
+      const store = transaction.objectStore('customers');
+      const request = store.getAll();
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
   }
 
   async saveCustomer(customer: any): Promise<void> {
-    const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO customers (id, name, phone, email, address, createdAt)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-    stmt.run(customer.id, customer.name, customer.phone, customer.email, customer.address, customer.createdAt);
+    const db = await this.ensureDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['customers'], 'readwrite');
+      const store = transaction.objectStore('customers');
+      const request = store.put(customer);
+      
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
   }
 
   async deleteCustomer(customerId: string): Promise<void> {
-    const stmt = this.db.prepare('DELETE FROM customers WHERE id = ?');
-    stmt.run(customerId);
+    const db = await this.ensureDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['customers'], 'readwrite');
+      const store = transaction.objectStore('customers');
+      const request = store.delete(customerId);
+      
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
   }
 
   // Product methods
   async getProducts(): Promise<any[]> {
-    const stmt = this.db.prepare('SELECT * FROM products ORDER BY name');
-    const rows = stmt.all() as Product[];
-    return rows.map(row => ({
-      ...row,
-      hasVariableColors: Boolean(row.hasVariableColors),
-      predefinedColors: JSON.parse(row.predefinedColors || '[]'),
-      volumes: JSON.parse(row.volumes || '[]')
-    }));
+    const db = await this.ensureDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['products'], 'readonly');
+      const store = transaction.objectStore('products');
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        const products = request.result.map((product: any) => ({
+          ...product,
+          predefinedColors: typeof product.predefinedColors === 'string' 
+            ? JSON.parse(product.predefinedColors) 
+            : product.predefinedColors || [],
+          volumes: typeof product.volumes === 'string' 
+            ? JSON.parse(product.volumes) 
+            : product.volumes || []
+        }));
+        resolve(products);
+      };
+      request.onerror = () => reject(request.error);
+    });
   }
 
   async saveProduct(product: any): Promise<void> {
-    const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO products (
-        id, name, description, basePrice, category, hasVariableColors,
-        predefinedColors, volumes, stockQuantity, unit
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    stmt.run(
-      product.id,
-      product.name,
-      product.description,
-      product.basePrice,
-      product.category,
-      product.hasVariableColors ? 1 : 0,
-      JSON.stringify(product.predefinedColors || []),
-      JSON.stringify(product.volumes || []),
-      product.stockQuantity,
-      product.unit
-    );
+    const db = await this.ensureDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['products'], 'readwrite');
+      const store = transaction.objectStore('products');
+      
+      const productToSave = {
+        ...product,
+        predefinedColors: typeof product.predefinedColors === 'string' 
+          ? product.predefinedColors 
+          : JSON.stringify(product.predefinedColors || []),
+        volumes: typeof product.volumes === 'string' 
+          ? product.volumes 
+          : JSON.stringify(product.volumes || [])
+      };
+      
+      const request = store.put(productToSave);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
   }
 
   async deleteProduct(productId: string): Promise<void> {
-    const stmt = this.db.prepare('DELETE FROM products WHERE id = ?');
-    stmt.run(productId);
+    const db = await this.ensureDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['products'], 'readwrite');
+      const store = transaction.objectStore('products');
+      const request = store.delete(productId);
+      
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
   }
 
   // Store settings methods
   async getStoreSetting(key: string): Promise<string | null> {
-    const stmt = this.db.prepare('SELECT value FROM store_settings WHERE key = ?');
-    const row = stmt.get(key) as { value: string } | undefined;
-    return row ? row.value : null;
+    const db = await this.ensureDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['store_settings'], 'readonly');
+      const store = transaction.objectStore('store_settings');
+      const request = store.get(key);
+      
+      request.onsuccess = () => {
+        resolve(request.result ? request.result.value : null);
+      };
+      request.onerror = () => reject(request.error);
+    });
   }
 
   async saveStoreSetting(key: string, value: string): Promise<void> {
-    const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO store_settings (id, key, value)
-      VALUES (?, ?, ?)
-    `);
-    stmt.run(`${key}_${Date.now()}`, key, value);
+    const db = await this.ensureDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['store_settings'], 'readwrite');
+      const store = transaction.objectStore('store_settings');
+      const request = store.put({ key, value });
+      
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
   }
 
   async getAllStoreSettings(): Promise<{ [key: string]: string }> {
-    const stmt = this.db.prepare('SELECT key, value FROM store_settings');
-    const rows = stmt.all() as { key: string; value: string }[];
-    const settings: { [key: string]: string } = {};
-    rows.forEach(row => {
-      settings[row.key] = row.value;
+    const db = await this.ensureDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['store_settings'], 'readonly');
+      const store = transaction.objectStore('store_settings');
+      const request = store.getAll();
+      
+      request.onsuccess = () => {
+        const settings: { [key: string]: string } = {};
+        request.result.forEach((item: any) => {
+          settings[item.key] = item.value;
+        });
+        resolve(settings);
+      };
+      request.onerror = () => reject(request.error);
     });
-    return settings;
   }
 
-  // Get storage usage
   getStorageUsage(): { used: number; available: number } {
-    const stmt = this.db.prepare(`
-      SELECT 
-        (SELECT COUNT(*) FROM invoices) as invoices,
-        (SELECT COUNT(*) FROM customers) as customers,
-        (SELECT COUNT(*) FROM products) as products,
-        (SELECT COUNT(*) FROM store_settings) as settings
-    `);
-    const result = stmt.get() as any;
-    
-    // Estimate storage usage (in KB)
-    const estimatedUsage = (result.invoices * 5) + (result.customers * 2) + (result.products * 3) + (result.settings * 1);
-    
+    // Estimate storage usage for IndexedDB
     return {
-      used: estimatedUsage,
-      available: 1000000 - estimatedUsage // 1GB limit
+      used: 100, // Placeholder
+      available: 1000000 - 100 // 1GB limit
     };
   }
 }
