@@ -160,14 +160,10 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
   useEffect(() => {
     // Calculate subtotal, tax, and total whenever items or gstEnabled change
     const newSubtotal = items.reduce((sum, item) => sum + item.total, 0);
-    const roundedSubtotal = Math.round(newSubtotal * 100) / 100; // Fix decimal precision
-    setSubtotal(roundedSubtotal);
-    
-    const newTax = gstEnabled ? Math.round(roundedSubtotal * 0.18 * 100) / 100 : 0; // Fix decimal precision
+    setSubtotal(newSubtotal);
+    const newTax = gstEnabled ? +(newSubtotal * 0.18).toFixed(2) : 0;
     setTax(newTax);
-    
-    const newTotal = Math.round((roundedSubtotal + newTax) * 100) / 100; // Fix decimal precision
-    setTotal(newTotal);
+    setTotal(+(newSubtotal + newTax).toFixed(2));
   }, [items, gstEnabled]);
 
   const addItem = () => {
@@ -192,7 +188,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
         if (field === 'quantity' || field === 'rate') {
           const quantity = field === 'quantity' ? Number(value) : Number(item.quantity);
           const rate = field === 'rate' ? Number(value) : Number(item.rate);
-          updatedItem.total = Math.round(quantity * rate * 100) / 100; // Fix decimal precision
+          updatedItem.total = quantity * rate;
         }
         
         return updatedItem;

@@ -1,255 +1,277 @@
-import React, { useState } from 'react';
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Calendar, DollarSign, Users } from "lucide-react";
-import Invoices from "@/components/Invoices";
-import InvoiceBuilder from "@/components/InvoiceBuilder";
-import StoreSettings from "@/components/StoreSettings";
-import FolderSettings from "@/components/FolderSettings";
-import StorageUsage from "@/components/StorageUsage";
 
-interface DashboardCardProps {
-  title: string;
-  value: string;
-  icon: React.ReactNode;
-}
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Products from "../components/Products";
+import Customers from "../components/Customers";
+import Invoices from "../components/Invoices";
+import InvoiceBuilder from "../components/InvoiceBuilder";
+import ProtectedReports from "../components/ProtectedReports";
+import FolderSettings from "../components/FolderSettings";
+import StoreSettings from "../components/StoreSettings";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { FileText, Users, Package, Plus, Eye, Calendar } from "lucide-react";
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'invoices' | 'settings'>('dashboard');
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'store' | 'folder' | 'storage'>('store');
-  const [isInvoiceBuilderOpen, setIsInvoiceBuilderOpen] = useState(false);
-  const [editInvoiceId, setEditInvoiceId] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<'dashboard' | 'invoice'>('dashboard');
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [editInvoiceId, setEditInvoiceId] = useState<string | undefined>();
+  const [storeInfo, setStoreInfo] = useState<any>({});
+  const [dashboardStats, setDashboardStats] = useState({
+    totalInvoices: 0,
+    totalCustomers: 0,
+    totalProducts: 0,
+    todayInvoices: 0
+  });
+
+  useEffect(() => {
+    loadStoreInfo();
+    calculateDashboardStats();
+  }, []);
+
+  // Recalculate stats when returning to dashboard
+  useEffect(() => {
+    if (activeView === 'dashboard') {
+      calculateDashboardStats();
+    }
+  }, [activeView]);
+
+  const loadStoreInfo = () => {
+    const savedStoreInfo = localStorage.getItem('storeInfo');
+    if (savedStoreInfo) {
+      setStoreInfo(JSON.parse(savedStoreInfo));
+    }
+  };
+
+  const calculateDashboardStats = () => {
+    // Load store info
+    loadStoreInfo();
+    
+    // Calculate dashboard stats
+    const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
+    const customers = JSON.parse(localStorage.getItem('customers') || '[]');
+    const products = JSON.parse(localStorage.getItem('products') || '[]');
+    
+    const today = new Date().toDateString();
+    const todayInvoices = invoices.filter((invoice: any) => 
+      new Date(invoice.date).toDateString() === today
+    );
+
+    setDashboardStats({
+      totalInvoices: invoices.length,
+      totalCustomers: customers.length,
+      totalProducts: products.length,
+      todayInvoices: todayInvoices.length
+    });
+  };
 
   const handleCreateInvoice = () => {
-    setIsInvoiceBuilderOpen(true);
-    setEditInvoiceId(null);
+    setEditInvoiceId(undefined);
+    setActiveView('invoice');
   };
 
   const handleEditInvoice = (invoiceId: string) => {
-    setIsInvoiceBuilderOpen(true);
     setEditInvoiceId(invoiceId);
+    setActiveView('invoice');
   };
 
-  const handleInvoiceBuilderClose = (invoiceId?: string) => {
-    setIsInvoiceBuilderOpen(false);
-    setEditInvoiceId(null);
-    if (invoiceId) {
-      setActiveTab('invoices');
+  const handleInvoiceClose = () => {
+    setActiveView('dashboard');
+    setEditInvoiceId(undefined);
+    // Recalculate stats when returning from invoice creation
+    calculateDashboardStats();
+  };
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    // Recalculate stats when switching tabs
+    if (value === 'dashboard') {
+      calculateDashboardStats();
     }
   };
 
-  const renderSettingsContent = () => {
-    switch (activeSettingsTab) {
-      case 'store':
-        return <StoreSettings />;
-      case 'folder':
-        return <FolderSettings />;
-      case 'storage':
-        return <StorageUsage />;
-      default:
-        return <StoreSettings />;
-    }
+  const navigateToCustomers = () => {
+    setActiveTab('customers');
   };
 
-  const renderMainContent = () => {
-    switch (activeTab) {
-      case 'dashboard':
-        return (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <DashboardCard
-              title="Total Invoices"
-              value={JSON.parse(localStorage.getItem('invoices') || '[]').length.toString()}
-              icon={<FileText className="h-4 w-4 text-muted-foreground" />}
-            />
-            <DashboardCard
-              title="Upcoming Appointments"
-              value="5"
-              icon={<Calendar className="h-4 w-4 text-muted-foreground" />}
-            />
-            <DashboardCard
-              title="Revenue"
-              value="₹25,000"
-              icon={<DollarSign className="h-4 w-4 text-muted-foreground" />}
-            />
-            <DashboardCard
-              title="Total Customers"
-              value={JSON.parse(localStorage.getItem('customers') || '[]').length.toString()}
-              icon={<Users className="h-4 w-4 text-muted-foreground" />}
-            />
-          </div>
-        );
-      case 'invoices':
-        return <Invoices onCreateInvoice={handleCreateInvoice} onEditInvoice={handleEditInvoice} />;
-      case 'settings':
-        return (
-          <div>
-            <div className="flex space-x-1 mb-6 bg-white p-1 rounded-lg shadow-sm border">
-              <button
-                onClick={() => setActiveSettingsTab('store')}
-                className={`px-4 py-2 rounded-md transition-colors ${
-                  activeSettingsTab === 'store'
-                    ? 'bg-blue-500 text-white'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                Store Info
-              </button>
-              <button
-                onClick={() => setActiveSettingsTab('folder')}
-                className={`px-4 py-2 rounded-md transition-colors ${
-                  activeSettingsTab === 'folder'
-                    ? 'bg-blue-500 text-white'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                File Storage
-              </button>
-              <button
-                onClick={() => setActiveSettingsTab('storage')}
-                className={`px-4 py-2 rounded-md transition-colors ${
-                  activeSettingsTab === 'storage'
-                    ? 'bg-blue-500 text-white'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                Storage Usage
-              </button>
-            </div>
-            {renderSettingsContent()}
-          </div>
-        );
-      default:
-        return <div>Select a tab</div>;
-    }
+  const navigateToProducts = () => {
+    setActiveTab('products');
   };
+
+  if (activeView === 'invoice') {
+    return <InvoiceBuilder onClose={handleInvoiceClose} editInvoiceId={editInvoiceId} />;
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
-      <div className="bg-white py-4 shadow-md sticky top-0 z-10">
-        <div className="container mx-auto px-4">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-blue-600">Invoice App</h1>
-            <div className="flex space-x-4">
-              <Button
-                onClick={() => setActiveTab('dashboard')}
-                variant={activeTab === 'dashboard' ? 'default' : 'outline'}
-              >
-                Dashboard
-              </Button>
-              <Button
-                onClick={() => setActiveTab('invoices')}
-                variant={activeTab === 'invoices' ? 'default' : 'outline'}
-              >
-                Invoices
-              </Button>
-              <Button
-                onClick={() => setActiveTab('settings')}
-                variant={activeTab === 'settings' ? 'default' : 'outline'}
-              >
-                Settings
-              </Button>
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="container mx-auto p-6">
+        {/* Beautiful Store Name Header */}
+        <div className="text-center mb-8">
+          <div className="inline-block">
+            <h1 className="text-6xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 bg-clip-text text-transparent mb-3 tracking-wide">
+              {storeInfo.businessName || storeInfo.name || 'Your Business Name'}
+            </h1>
+            <div className="w-full h-1 bg-gradient-to-r from-purple-400 via-blue-400 to-indigo-400 rounded-full mb-4"></div>
+            <p className="text-lg text-gray-600 font-medium">{storeInfo.address || 'Your Business Address'}</p>
+            <p className="text-gray-500">{storeInfo.phone || '+91 00000 00000'} | {storeInfo.email || 'your@email.com'}</p>
           </div>
         </div>
-      </div>
 
-      <div className="container mx-auto px-4 py-8">
-        {activeTab === 'dashboard' && (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <DashboardCard
-              title="Total Invoices"
-              value={JSON.parse(localStorage.getItem('invoices') || '[]').length.toString()}
-              icon={<FileText className="h-4 w-4 text-muted-foreground" />}
-            />
-            <DashboardCard
-              title="Upcoming Appointments"
-              value="5"
-              icon={<Calendar className="h-4 w-4 text-muted-foreground" />}
-            />
-            <DashboardCard
-              title="Revenue"
-              value="₹25,000"
-              icon={<DollarSign className="h-4 w-4 text-muted-foreground" />}
-            />
-            <DashboardCard
-              title="Total Customers"
-              value={JSON.parse(localStorage.getItem('customers') || '[]').length.toString()}
-              icon={<Users className="h-4 w-4 text-muted-foreground" />}
-            />
-          </div>
-        )}
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+          <TabsList className="grid w-full grid-cols-7 bg-gradient-to-r from-purple-100 to-blue-100">
+            <TabsTrigger value="dashboard" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-blue-500 data-[state=active]:text-white">Dashboard</TabsTrigger>
+            <TabsTrigger value="invoices" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white">Invoices</TabsTrigger>
+            <TabsTrigger value="products" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-green-600 data-[state=active]:text-white">Products</TabsTrigger>
+            <TabsTrigger value="customers" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-orange-600 data-[state=active]:text-white">Customers</TabsTrigger>
+            <TabsTrigger value="reports" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500 data-[state=active]:to-red-600 data-[state=active]:text-white">Reports</TabsTrigger>
+            <TabsTrigger value="folders" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white">File Storage</TabsTrigger>
+            <TabsTrigger value="settings" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-gray-500 data-[state=active]:to-gray-600 data-[state=active]:text-white">Settings</TabsTrigger>
+          </TabsList>
 
-        {activeTab === 'settings' && (
-          <div>
-            <div className="flex space-x-1 mb-6 bg-white p-1 rounded-lg shadow-sm border">
-              <button
-                onClick={() => setActiveSettingsTab('store')}
-                className={`px-4 py-2 rounded-md transition-colors ${
-                  activeSettingsTab === 'store'
-                    ? 'bg-blue-500 text-white'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                Store Info
-              </button>
-              <button
-                onClick={() => setActiveSettingsTab('folder')}
-                className={`px-4 py-2 rounded-md transition-colors ${
-                  activeSettingsTab === 'folder'
-                    ? 'bg-blue-500 text-white'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                File Storage
-              </button>
-              <button
-                onClick={() => setActiveSettingsTab('storage')}
-                className={`px-4 py-2 rounded-md transition-colors ${
-                  activeSettingsTab === 'storage'
-                    ? 'bg-blue-500 text-white'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                Storage Usage
-              </button>
+          <TabsContent value="dashboard" className="space-y-6">
+            {/* Stats Cards */}
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+              <Card className="shadow-lg border-0 bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Invoices</CardTitle>
+                  <FileText className="h-4 w-4" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{dashboardStats.totalInvoices}</div>
+                  <p className="text-xs text-blue-100">All time invoices</p>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-lg border-0 bg-gradient-to-br from-green-500 to-blue-500 text-white">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Today's Invoices</CardTitle>
+                  <Calendar className="h-4 w-4" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{dashboardStats.todayInvoices}</div>
+                  <p className="text-xs text-green-100">Invoices created today</p>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-lg border-0 bg-gradient-to-br from-orange-500 to-red-500 text-white">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
+                  <Users className="h-4 w-4" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{dashboardStats.totalCustomers}</div>
+                  <p className="text-xs text-orange-100">Registered customers</p>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-lg border-0 bg-gradient-to-br from-purple-500 to-pink-500 text-white">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Products</CardTitle>
+                  <Package className="h-4 w-4" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{dashboardStats.totalProducts}</div>
+                  <p className="text-xs text-purple-100">Available products</p>
+                </CardContent>
+              </Card>
             </div>
-            {renderSettingsContent()}
-          </div>
-        )}
 
-        {activeTab === 'invoices' && (
-          <Invoices onCreateInvoice={handleCreateInvoice} onEditInvoice={handleEditInvoice} />
-        )}
+            {/* Quick Actions */}
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-blue-50">
+                <CardHeader>
+                  <CardTitle className="text-blue-800 flex items-center gap-2">
+                    <Plus className="h-5 w-5" />
+                    Quick Actions
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Button 
+                    onClick={handleCreateInvoice}
+                    className="w-full bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create New Invoice
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    className="w-full border-blue-200 hover:bg-blue-50 text-blue-600"
+                    onClick={navigateToCustomers}
+                  >
+                    <Users className="mr-2 h-4 w-4" />
+                    Add Customer
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    className="w-full border-purple-200 hover:bg-purple-50 text-purple-600"
+                    onClick={navigateToProducts}
+                  >
+                    <Package className="mr-2 h-4 w-4" />
+                    Add Product
+                  </Button>
+                </CardContent>
+              </Card>
 
-        {isInvoiceBuilderOpen && (
-          <div className="fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 z-50 flex items-center justify-center">
-            <div className="bg-white rounded-lg shadow-xl max-w-5xl mx-auto">
-              <InvoiceBuilder onClose={handleInvoiceBuilderClose} editInvoiceId={editInvoiceId || undefined} />
+              <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-green-50">
+                <CardHeader>
+                  <CardTitle className="text-green-800 flex items-center gap-2">
+                    <Eye className="h-5 w-5" />
+                    Recent Activity
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 text-sm">
+                    <p className="text-green-700">Today: {dashboardStats.todayInvoices} invoices created</p>
+                    <p className="text-green-700">Total customers: {dashboardStats.totalCustomers}</p>
+                    <p className="text-green-700">Products available: {dashboardStats.totalProducts}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-purple-50">
+                <CardHeader>
+                  <CardTitle className="text-purple-800 flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Business Summary
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 text-sm">
+                    <p className="text-purple-700">Active since: {new Date().getFullYear()}</p>
+                    <p className="text-purple-700">Total operations: {dashboardStats.totalInvoices}</p>
+                    <p className="text-purple-700">Status: Operational ✅</p>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-          </div>
-        )}
+          </TabsContent>
+
+          <TabsContent value="invoices" className="space-y-6">
+            <Invoices onCreateInvoice={handleCreateInvoice} onEditInvoice={handleEditInvoice} />
+          </TabsContent>
+
+          <TabsContent value="products" className="space-y-6">
+            <Products />
+          </TabsContent>
+
+          <TabsContent value="customers" className="space-y-6">
+            <Customers />
+          </TabsContent>
+
+          <TabsContent value="reports" className="space-y-6">
+            <ProtectedReports />
+          </TabsContent>
+
+          <TabsContent value="folders" className="space-y-6">
+            <FolderSettings />
+          </TabsContent>
+
+          <TabsContent value="settings" className="space-y-6">
+            <StoreSettings />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
-  );
-};
-
-interface DashboardCardProps {
-  title: string;
-  value: string;
-  icon: React.ReactNode;
-}
-
-const DashboardCard: React.FC<DashboardCardProps> = ({ title, value, icon }) => {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        {icon}
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-      </CardContent>
-    </Card>
   );
 };
 

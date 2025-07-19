@@ -47,7 +47,7 @@ const FolderSettings: React.FC = () => {
         
         toast({
           title: "Folder Selected",
-          description: "All future invoices will be saved automatically to your selected folder with organized subfolders (Invoices/YYYY/MM/DD/). You won't be prompted again.",
+          description: "All invoices will now be saved to your selected folder with organized subfolders (Invoices/YYYY/MM/DD/)",
           className: "bg-green-50 border-green-200 text-green-800"
         });
       } catch (error) {
@@ -56,7 +56,7 @@ const FolderSettings: React.FC = () => {
     } else {
       toast({
         title: "Browser Not Supported", 
-        description: "Your browser doesn't support folder selection. Invoices will be auto-downloaded to your Downloads folder instead.",
+        description: "Your browser doesn't support folder selection. Invoices will be downloaded to your Downloads folder instead.",
         variant: "destructive"
       });
     }
