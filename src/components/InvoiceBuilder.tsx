@@ -38,9 +38,10 @@ interface Customer {
 
 interface InvoiceBuilderProps {
   onClose: (invoiceId?: string) => void;
+  editInvoiceId?: string;
 }
 
-const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
+const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId }) => {
   const [invoiceId, setInvoiceId] = useState<string>(Date.now().toString());
   const [invoiceNumber, setInvoiceNumber] = useState<string>('');
   const [customerDetails, setCustomerDetails] = useState<{ name: string; phone: string; address: string; email?: string }>({
@@ -123,7 +124,24 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     setCustomers(savedCustomers);
     setProducts(savedProducts);
 
-    // Generate invoice number
+    // If editing an existing invoice, load its data
+    if (editInvoiceId) {
+      const savedInvoices = JSON.parse(localStorage.getItem('invoices') || '[]');
+      const existingInvoice = savedInvoices.find((inv: any) => inv.id === editInvoiceId);
+      if (existingInvoice) {
+        setInvoiceId(existingInvoice.id);
+        setInvoiceNumber(existingInvoice.invoiceNumber);
+        setCustomerDetails(existingInvoice.customerDetails);
+        setInvoiceDate(existingInvoice.date);
+        setItems(existingInvoice.items);
+        setNotes(existingInvoice.notes || '');
+        setGstEnabled(existingInvoice.gstEnabled || false);
+        setPaymentStatus(existingInvoice.status || 'paid');
+        return;
+      }
+    }
+
+    // Generate invoice number for new invoice
     setInvoiceNumber(generateInvoiceNumber());
     
     // Start with one empty item
@@ -137,7 +155,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
       volume: ''
     };
     setItems([initialItem]);
-  }, []);
+  }, [editInvoiceId]);
 
   useEffect(() => {
     // Calculate subtotal, tax, and total whenever items or gstEnabled change
@@ -588,7 +606,9 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
             <ArrowLeft className="h-4 w-4" />
             Back to Dashboard
           </Button>
-          <h1 className="text-2xl font-bold text-blue-600">Create Invoice</h1>
+          <h1 className="text-2xl font-bold text-blue-600">
+            {editInvoiceId ? 'Edit Invoice' : 'Create Invoice'}
+          </h1>
           <div></div>
         </div>
 
@@ -865,7 +885,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
                   value={invoiceNumber}
                   onChange={(e) => setInvoiceNumber(e.target.value)}
                   required
-                  disabled
+                  disabled={!editInvoiceId}
                 />
               </div>
               <div>
