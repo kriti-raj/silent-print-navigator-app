@@ -1,11 +1,13 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Eye, Edit, Trash2, Search, Filter, Plus, FileText, Calendar, DollarSign, Users, Printer } from "lucide-react";
+import { Eye, Edit, Trash2, Search, Plus, FileText, Printer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { saveInvoicePDF } from "../utils/fileSystem";
+import { sqliteService } from '../services/sqliteService';
 
 interface Invoice {
   id: string;
@@ -59,10 +61,17 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
     loadInvoices();
   }, []);
 
-  const loadInvoices = () => {
-    const savedInvoices = localStorage.getItem('invoices');
-    if (savedInvoices) {
-      setInvoices(JSON.parse(savedInvoices));
+  const loadInvoices = async () => {
+    try {
+      const loadedInvoices = await sqliteService.getInvoices();
+      setInvoices(loadedInvoices);
+    } catch (error) {
+      console.error('Error loading invoices:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load invoices from database.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -86,43 +95,56 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
     setFilteredInvoices(filtered);
   }, [invoices, searchTerm, statusFilter]);
 
-  const deleteInvoice = (id: string) => {
+  const deleteInvoice = async (id: string) => {
     if (confirm('Are you sure you want to delete this invoice?')) {
-      const updatedInvoices = invoices.filter(invoice => invoice.id !== id);
-      localStorage.setItem('invoices', JSON.stringify(updatedInvoices));
-      setInvoices(updatedInvoices);
-      
-      toast({
-        title: "Invoice Deleted",
-        description: "The invoice has been successfully deleted.",
-        className: "bg-green-50 border-green-200 text-green-800"
-      });
+      try {
+        await sqliteService.deleteInvoice(id);
+        await loadInvoices();
+        
+        toast({
+          title: "Invoice Deleted",
+          description: "The invoice has been successfully deleted.",
+          className: "bg-green-50 border-green-200 text-green-800"
+        });
+      } catch (error) {
+        console.error('Error deleting invoice:', error);
+        toast({
+          title: "Error",
+          description: "Failed to delete invoice from database.",
+          variant: "destructive"
+        });
+      }
     }
   };
 
-  const getCurrentStoreSettings = (): { name: string; address: string; phone: string; email: string; taxId: string; website: string; logo?: string; paymentQR?: string; printFormat?: 'a4' | 'thermal'; silentPrint?: boolean; } => {
-    const storeInfo = localStorage.getItem('storeInfo');
-    let storeSettings = {};
-    if (storeInfo) {
-      try {
-        storeSettings = JSON.parse(storeInfo);
-      } catch (e) {
-        console.error('Error parsing store settings:', e);
-      }
+  const getCurrentStoreSettings = async (): Promise<{ name: string; address: string; phone: string; email: string; taxId: string; website: string; logo?: string; paymentQR?: string; printFormat?: 'a4' | 'thermal'; silentPrint?: boolean; }> => {
+    try {
+      const settings = await sqliteService.getAllStoreSettings();
+      return {
+        name: settings.businessName || settings.name || 'Your Business Name',
+        address: settings.address || 'Your Business Address',
+        phone: settings.phone || '+91 00000 00000',
+        email: settings.email || 'your@email.com',
+        taxId: settings.gstNumber || settings.taxId || 'GST000000000',
+        website: settings.website || 'www.yourbusiness.com',
+        logo: settings.logo || '',
+        paymentQR: settings.paymentQR || '',
+        printFormat: settings.printFormat || 'a4',
+        silentPrint: settings.silentPrint === 'true'
+      };
+    } catch (error) {
+      console.error('Error getting store settings:', error);
+      return {
+        name: 'Your Business Name',
+        address: 'Your Business Address',
+        phone: '+91 00000 00000',
+        email: 'your@email.com',
+        taxId: 'GST000000000',
+        website: 'www.yourbusiness.com',
+        printFormat: 'a4',
+        silentPrint: false
+      };
     }
-    const finalSettings = {
-      name: (storeSettings as any).businessName || (storeSettings as any).name || 'Your Business Name',
-      address: (storeSettings as any).address || 'Your Business Address',
-      phone: (storeSettings as any).phone || '+91 00000 00000',
-      email: (storeSettings as any).email || 'your@email.com',
-      taxId: (storeSettings as any).gstNumber || (storeSettings as any).taxId || 'GST000000000',
-      website: (storeSettings as any).website || 'www.yourbusiness.com',
-      logo: (storeSettings as any).logo || '',
-      paymentQR: (storeSettings as any).paymentQR || '',
-      printFormat: (storeSettings as any).printFormat || 'a4',
-      silentPrint: (storeSettings as any).silentPrint || false
-    };
-    return finalSettings;
   };
 
   const generateInvoiceHTML = (invoice: Invoice, storeInfo: any, upiQRUrl: string) => {
@@ -362,11 +384,10 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
     `;
   };
 
-  const viewInvoice = (invoice: Invoice) => {
+  const viewInvoice = async (invoice: Invoice) => {
     console.log('View invoice:', invoice);
     
-    // Generate and open invoice HTML in new window
-    const currentStoreInfo = getCurrentStoreSettings();
+    const currentStoreInfo = await getCurrentStoreSettings();
     const upiQRUrl = invoice.savedQRCode || '';
     
     const htmlContent = generateInvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
@@ -382,7 +403,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
     try {
       console.log('Printing invoice from list...');
       
-      const currentStoreInfo = getCurrentStoreSettings();
+      const currentStoreInfo = await getCurrentStoreSettings();
       const upiQRUrl = invoice.savedQRCode || '';
 
       let htmlContent;
@@ -392,46 +413,29 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
         htmlContent = generateA4InvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
       }
 
-      if (currentStoreInfo.silentPrint) {
-        // Silent print - only show print dialog
-        const printWindow = window.open('', '_blank', 'width=800,height=600');
-        if (printWindow) {
-          printWindow.document.write(htmlContent);
-          printWindow.document.close();
-          
-          printWindow.onload = () => {
-            setTimeout(() => {
-              printWindow.focus();
+      const printWindow = window.open('', '_blank', 'width=800,height=600');
+      if (printWindow) {
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+        
+        printWindow.onload = () => {
+          setTimeout(() => {
+            printWindow.focus();
+            if (currentStoreInfo.silentPrint) {
+              // Silent print - automatically print without showing dialog
               printWindow.print();
-            }, 500);
-          };
-          
-          toast({
-            title: "Invoice Printed",
-            description: `Invoice ${invoice.invoiceNumber} has been sent to printer.`,
-            className: "bg-green-50 border-green-200 text-green-800"
-          });
-        }
-      } else {
-        // Regular print - open print dialog
-        const printWindow = window.open('', '_blank', 'width=800,height=600');
-        if (printWindow) {
-          printWindow.document.write(htmlContent);
-          printWindow.document.close();
-          
-          printWindow.onload = () => {
-            setTimeout(() => {
-              printWindow.focus();
+            } else {
+              // Normal print - show print dialog
               printWindow.print();
-            }, 500);
-          };
-          
-          toast({
-            title: "Invoice Printed",
-            description: `Invoice ${invoice.invoiceNumber} has been sent to printer.`,
-            className: "bg-green-50 border-green-200 text-green-800"
-          });
-        }
+            }
+          }, 500);
+        };
+        
+        toast({
+          title: "Invoice Printed",
+          description: `Invoice ${invoice.invoiceNumber} has been sent to printer.`,
+          className: "bg-green-50 border-green-200 text-green-800"
+        });
       }
     } catch (error) {
       console.error('Printing error:', error);
@@ -447,7 +451,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
     try {
       console.log('Saving invoice from list...');
       
-      const currentStoreInfo = getCurrentStoreSettings();
+      const currentStoreInfo = await getCurrentStoreSettings();
       const upiQRUrl = invoice.savedQRCode || '';
 
       let htmlContent;
@@ -457,14 +461,21 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
         htmlContent = generateA4InvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
       }
 
-      // Save to file system
-      await saveInvoicePDF(invoice.invoiceNumber, htmlContent);
+      const result = await saveInvoicePDF(invoice.invoiceNumber, htmlContent);
 
-      toast({
-        title: "Invoice Saved",
-        description: `Invoice ${invoice.invoiceNumber} has been saved successfully.`,
-        className: "bg-green-50 border-green-200 text-green-800"
-      });
+      if (result.success) {
+        toast({
+          title: "Invoice Saved",
+          description: `Invoice ${invoice.invoiceNumber} has been saved to: ${result.filePath}`,
+          className: "bg-green-50 border-green-200 text-green-800"
+        });
+      } else {
+        toast({
+          title: "Saving Error",
+          description: "An error occurred while saving. Please try again.",
+          variant: "destructive"
+        });
+      }
     } catch (error) {
       console.error('Saving error:', error);
       toast({
@@ -479,7 +490,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Invoices</h2>
+        <h2 className="text-2xl font-bold">Invoices (SQLite Database)</h2>
         <Button onClick={onCreateInvoice} className="bg-blue-600 hover:bg-blue-700">
           <Plus className="mr-2 h-4 w-4" />
           Create New Invoice

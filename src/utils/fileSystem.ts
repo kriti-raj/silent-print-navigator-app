@@ -1,103 +1,27 @@
 
-// File system utilities for PC/Desktop application
+import { fileSystemService } from '../services/fileSystemService';
+import { sqliteService } from '../services/sqliteService';
+
+// File system utilities for Desktop application
 export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string) => {
   try {
-    const fileName = `Invoice_${invoiceNumber}.html`;
-
-    // Check if user has selected a folder
-    const folderSelected = localStorage.getItem('folderSelected') === 'true';
-    let folderHandle = null;
-
-    // Try to get the stored folder handle
-    if (folderSelected) {
-      try {
-        const storedHandle = localStorage.getItem('selectedFolderHandle');
-        if (storedHandle && 'showDirectoryPicker' in window) {
-          // We need to ask user to select folder again due to browser security
-          folderHandle = await (window as any).showDirectoryPicker({
-            mode: 'readwrite',
-            startIn: 'documents'
-          });
-        }
-      } catch (error) {
-        console.log('Could not access previously selected folder, will use downloads');
-      }
+    const result = await fileSystemService.saveInvoicePDF(invoiceNumber, htmlContent);
+    
+    if (result.success) {
+      console.log(`Invoice ${invoiceNumber} saved to: ${result.filePath}`);
+      return {
+        success: true,
+        fileName: result.fileName,
+        filePath: result.filePath,
+        method: 'filesystem'
+      };
+    } else {
+      console.error('Error saving invoice:', result.error);
+      return {
+        success: false,
+        error: result.error
+      };
     }
-
-    // If we have a folder handle, save to the selected folder (no subfolders)
-    if (folderHandle) {
-      try {
-        // Create and write the file directly in the selected folder
-        const fileHandle = await folderHandle.getFileHandle(fileName, { create: true });
-        const writable = await fileHandle.createWritable();
-        await writable.write(htmlContent);
-        await writable.close();
-
-        console.log(`Invoice ${invoiceNumber} saved to selected folder`);
-
-        // Also save to localStorage for app tracking
-        const savedInvoices = JSON.parse(localStorage.getItem('savedInvoicePDFs') || '{}');
-        
-        if (!savedInvoices.files) savedInvoices.files = {};
-        
-        savedInvoices.files[invoiceNumber] = {
-          fileName: fileName,
-          timestamp: new Date().toISOString(),
-          savedLocation: 'selected-folder'
-        };
-        
-        localStorage.setItem('savedInvoicePDFs', JSON.stringify(savedInvoices));
-
-        return {
-          success: true,
-          fileName,
-          method: 'filesystem-api'
-        };
-      } catch (fsError) {
-        console.log('File System Access API failed, falling back to download');
-        // Fall through to download method
-      }
-    }
-
-    // Fallback: Auto-download to Downloads folder
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    
-    // Make the download silent by hiding the link
-    link.style.display = 'none';
-    document.body.appendChild(link);
-    link.click();
-    
-    // Clean up immediately to prevent interference
-    setTimeout(() => {
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    }, 100);
-
-    // Also save to localStorage for app tracking
-    const savedInvoices = JSON.parse(localStorage.getItem('savedInvoicePDFs') || '{}');
-    
-    if (!savedInvoices.files) savedInvoices.files = {};
-    
-    savedInvoices.files[invoiceNumber] = {
-      fileName: fileName,
-      timestamp: new Date().toISOString(),
-      downloadedFileName: fileName,
-      savedLocation: 'downloads'
-    };
-    
-    localStorage.setItem('savedInvoicePDFs', JSON.stringify(savedInvoices));
-    
-    console.log(`Invoice ${invoiceNumber} downloaded as: ${fileName}`);
-    
-    return {
-      success: true,
-      fileName: fileName,
-      method: 'download'
-    };
   } catch (error) {
     console.error('Error saving invoice PDF:', error);
     return {
@@ -107,12 +31,47 @@ export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string)
   }
 };
 
-export const getInvoiceFileStructure = () => {
-  const savedInvoices = JSON.parse(localStorage.getItem('savedInvoicePDFs') || '{}');
-  return savedInvoices;
+export const getInvoiceFileStructure = async () => {
+  try {
+    const settings = await sqliteService.getAllStoreSettings();
+    const invoiceFiles: { [key: string]: any } = {};
+    
+    // Get all invoice file paths from settings
+    Object.keys(settings).forEach(key => {
+      if (key.startsWith('invoice_') && key.endsWith('_path')) {
+        const invoiceNumber = key.replace('invoice_', '').replace('_path', '');
+        invoiceFiles[invoiceNumber] = {
+          filePath: settings[key],
+          timestamp: new Date().toISOString(),
+          savedLocation: 'selected-folder'
+        };
+      }
+    });
+    
+    return { files: invoiceFiles };
+  } catch (error) {
+    console.error('Error getting invoice file structure:', error);
+    return { files: {} };
+  }
 };
 
-export const getInvoicesFromFolder = () => {
-  const savedInvoices = JSON.parse(localStorage.getItem('savedInvoicePDFs') || '{}');
-  return savedInvoices.files || {};
+export const getInvoicesFromFolder = async () => {
+  const structure = await getInvoiceFileStructure();
+  return structure.files || {};
+};
+
+export const selectFolder = async () => {
+  return await fileSystemService.selectFolder();
+};
+
+export const resetFolderSelection = async () => {
+  await fileSystemService.resetFolderSelection();
+};
+
+export const isFolderSelected = async () => {
+  return await fileSystemService.isFolderSelected();
+};
+
+export const getSelectedFolderPath = async () => {
+  return await fileSystemService.getSelectedFolderPath();
 };

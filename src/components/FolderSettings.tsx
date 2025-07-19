@@ -1,89 +1,84 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FolderOpen, Download, Settings, HardDrive } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { sqliteService } from '../services/sqliteService';
+import { fileSystemService } from '../services/fileSystemService';
 
 const FolderSettings: React.FC = () => {
   const [folderSelected, setFolderSelected] = useState(false);
   const [storageInfo, setStorageInfo] = useState({ used: 0, available: 0 });
-  const [folderName, setFolderName] = useState('');
+  const [folderPath, setFolderPath] = useState('');
   const { toast } = useToast();
 
   useEffect(() => {
-    setFolderSelected(localStorage.getItem('folderSelected') === 'true');
-    const savedFolderName = localStorage.getItem('selectedFolderName');
-    if (savedFolderName) {
-      setFolderName(savedFolderName);
-    }
-    calculateStorageInfo();
+    loadSettings();
   }, []);
 
-  const calculateStorageInfo = () => {
-    const savedData = localStorage.getItem('savedInvoicePDFs');
-    const invoices = localStorage.getItem('invoices');
-    const customers = localStorage.getItem('customers');
-    const products = localStorage.getItem('products');
-    
-    let totalSize = 0;
-    if (savedData) totalSize += new Blob([savedData]).size;
-    if (invoices) totalSize += new Blob([invoices]).size;
-    if (customers) totalSize += new Blob([customers]).size;
-    if (products) totalSize += new Blob([products]).size;
-
-    // Convert to KB
-    const usedKB = Math.round(totalSize / 1024);
-    
-    setStorageInfo({
-      used: usedKB,
-      available: 10240 - usedKB // Assuming 10MB limit for localStorage
-    });
+  const loadSettings = async () => {
+    try {
+      const isFolderSelected = await fileSystemService.isFolderSelected();
+      const selectedPath = await fileSystemService.getSelectedFolderPath();
+      
+      setFolderSelected(isFolderSelected);
+      setFolderPath(selectedPath || '');
+      
+      const usage = sqliteService.getStorageUsage();
+      setStorageInfo(usage);
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
   };
 
   const selectFolder = async () => {
-    if ('showDirectoryPicker' in window) {
-      try {
-        const dirHandle = await (window as any).showDirectoryPicker({
-          mode: 'readwrite',
-          startIn: 'documents'
-        });
-        
-        localStorage.setItem('folderSelected', 'true');
-        localStorage.setItem('selectedFolderName', dirHandle.name || 'Selected Folder');
+    try {
+      const result = await fileSystemService.selectFolder();
+      
+      if (result.success && result.folderPath) {
         setFolderSelected(true);
-        setFolderName(dirHandle.name || 'Selected Folder');
+        setFolderPath(result.folderPath);
         
         toast({
           title: "Folder Selected",
-          description: `All invoices will now be saved to "${dirHandle.name}" with organized subfolders (Invoices/YYYY/MM/DD/)`,
+          description: `All invoices will now be saved to "${result.folderPath}"`,
           className: "bg-green-50 border-green-200 text-green-800"
         });
-      } catch (error) {
-        console.log('Folder selection cancelled');
+      } else {
         toast({
           title: "Folder Selection Cancelled",
-          description: "No folder was selected. Invoices will be downloaded to your Downloads folder.",
+          description: result.error || "No folder was selected. Invoices will be saved to Documents/Invoices.",
         });
       }
-    } else {
+    } catch (error) {
+      console.error('Error selecting folder:', error);
       toast({
-        title: "Browser Not Supported", 
-        description: "Your browser doesn't support folder selection. Invoices will be downloaded to your Downloads folder instead.",
+        title: "Error",
+        description: "Failed to select folder. Please try again.",
         variant: "destructive"
       });
     }
   };
 
-  const resetFolderSelection = () => {
-    localStorage.removeItem('folderSelected');
-    localStorage.removeItem('selectedFolderName');
-    setFolderSelected(false);
-    setFolderName('');
-    
-    toast({
-      title: "Folder Reset",
-      description: "Next invoice will be downloaded to your Downloads folder.",
-    });
+  const resetFolderSelection = async () => {
+    try {
+      await fileSystemService.resetFolderSelection();
+      setFolderSelected(false);
+      setFolderPath('');
+      
+      toast({
+        title: "Folder Reset",
+        description: "Invoices will now be saved to Documents/Invoices folder.",
+      });
+    } catch (error) {
+      console.error('Error resetting folder:', error);
+      toast({
+        title: "Error",
+        description: "Failed to reset folder selection.",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -100,9 +95,9 @@ const FolderSettings: React.FC = () => {
             <h4 className="font-medium text-blue-800 mb-2">How it works:</h4>
             <ul className="text-sm text-blue-700 space-y-1">
               <li>• Select a folder on your PC where invoices will be saved</li>
-              <li>• Invoices are organized in subfolders: Invoices/YYYY/MM/DD/</li>
+              <li>• All invoices are saved directly to your selected folder</li>
               <li>• Each invoice is saved as an HTML file you can open and print</li>
-              <li>• Files are saved directly to your PC, not just the browser</li>
+              <li>• Files are saved directly to your PC using SQLite database</li>
             </ul>
           </div>
 
@@ -111,8 +106,8 @@ const FolderSettings: React.FC = () => {
               <h4 className="font-medium">Storage Folder</h4>
               <p className="text-sm text-gray-600">
                 {folderSelected 
-                  ? `Folder selected: "${folderName}" - invoices will be saved with organized structure`
-                  : 'No folder selected - invoices will download to Downloads folder'
+                  ? `Folder: "${folderPath}" - invoices will be saved here`
+                  : 'No folder selected - invoices will be saved to Documents/Invoices'
                 }
               </p>
             </div>
@@ -147,20 +142,19 @@ const FolderSettings: React.FC = () => {
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div 
                 className="bg-blue-600 h-2 rounded-full" 
-                style={{ width: `${Math.min((storageInfo.used / 10240) * 100, 100)}%` }}
+                style={{ width: `${Math.min((storageInfo.used / storageInfo.available) * 100, 100)}%` }}
               ></div>
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              Browser storage: {storageInfo.available} KB available
+              SQLite database: {storageInfo.available} KB available
             </p>
           </div>
 
-          <div className="bg-yellow-50 p-4 rounded-lg">
-            <h4 className="font-medium text-yellow-800 mb-2">📁 For Desktop App (EXE):</h4>
-            <p className="text-sm text-yellow-700">
-              When you convert this to a desktop application using Electron or similar, 
-              it will have full access to your PC's file system and can create a dedicated 
-              "Invoices" folder in your Documents or any location you specify during installation.
+          <div className="bg-green-50 p-4 rounded-lg">
+            <h4 className="font-medium text-green-800 mb-2">✅ Desktop Application Features:</h4>
+            <p className="text-sm text-green-700">
+              This application uses SQLite database for all data storage and saves invoices 
+              directly to your selected folder on your PC. No browser dependencies!
             </p>
           </div>
         </CardContent>

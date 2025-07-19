@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Edit, Trash2, Save, X, IndianRupee, Search, Package } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { sqliteService } from '../services/sqliteService';
 
 interface Product {
   id: string;
@@ -40,42 +42,56 @@ const Products: React.FC = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    const savedProducts = localStorage.getItem('products');
-    if (savedProducts) {
-      setProducts(JSON.parse(savedProducts));
-    }
+    loadProducts();
   }, []);
 
-  const saveProducts = (updatedProducts: Product[]) => {
-    localStorage.setItem('products', JSON.stringify(updatedProducts));
-    setProducts(updatedProducts);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (editingProduct) {
-      const updatedProducts = products.map(p =>
-        p.id === editingProduct.id ? { ...formData, id: editingProduct.id } : p
-      );
-      saveProducts(updatedProducts);
+  const loadProducts = async () => {
+    try {
+      const loadedProducts = await sqliteService.getProducts();
+      setProducts(loadedProducts);
+    } catch (error) {
+      console.error('Error loading products:', error);
       toast({
-        title: "Product Updated",
-        description: `${formData.name} has been updated successfully.`
-      });
-    } else {
-      const newProduct: Product = {
-        ...formData,
-        id: Date.now().toString()
-      };
-      saveProducts([...products, newProduct]);
-      toast({
-        title: "Product Added",
-        description: `${formData.name} has been added successfully.`
+        title: "Error",
+        description: "Failed to load products from database.",
+        variant: "destructive"
       });
     }
+  };
 
-    resetForm();
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      if (editingProduct) {
+        const updatedProduct = { ...formData, id: editingProduct.id };
+        await sqliteService.saveProduct(updatedProduct);
+        toast({
+          title: "Product Updated",
+          description: `${formData.name} has been updated successfully.`
+        });
+      } else {
+        const newProduct: Product = {
+          ...formData,
+          id: Date.now().toString()
+        };
+        await sqliteService.saveProduct(newProduct);
+        toast({
+          title: "Product Added",
+          description: `${formData.name} has been added successfully.`
+        });
+      }
+
+      await loadProducts();
+      resetForm();
+    } catch (error) {
+      console.error('Error saving product:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save product to database.",
+        variant: "destructive"
+      });
+    }
   };
 
   const resetForm = () => {
@@ -100,13 +116,22 @@ const Products: React.FC = () => {
     setShowForm(true);
   };
 
-  const handleDelete = (id: string) => {
-    const updatedProducts = products.filter(p => p.id !== id);
-    saveProducts(updatedProducts);
-    toast({
-      title: "Product Deleted",
-      description: "Product has been deleted successfully."
-    });
+  const handleDelete = async (id: string) => {
+    try {
+      await sqliteService.deleteProduct(id);
+      await loadProducts();
+      toast({
+        title: "Product Deleted",
+        description: "Product has been deleted successfully."
+      });
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete product from database.",
+        variant: "destructive"
+      });
+    }
   };
 
   const filteredProducts = products.filter(product =>
@@ -119,7 +144,7 @@ const Products: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold">Products</h2>
-          <p className="text-muted-foreground">Manage your product inventory</p>
+          <p className="text-muted-foreground">Manage your product inventory (SQLite Database)</p>
         </div>
         <Button onClick={() => setShowForm(true)}>
           <Plus className="mr-2 h-4 w-4" />

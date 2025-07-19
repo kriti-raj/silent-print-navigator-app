@@ -1,5 +1,6 @@
 
-// Simulated API service for local network communication
+import { sqliteService } from './sqliteService';
+
 interface ApiInvoice {
   id: string;
   invoiceNumber: string;
@@ -42,9 +43,7 @@ class InvoiceApiService {
   private static instance: InvoiceApiService;
 
   constructor() {
-    // Initialize with existing invoices if any
-    this.ensureInvoicesExist();
-    this.ensureProductsExist();
+    // SQLite service handles initialization
   }
 
   static getInstance(): InvoiceApiService {
@@ -54,69 +53,27 @@ class InvoiceApiService {
     return InvoiceApiService.instance;
   }
 
-  private ensureInvoicesExist() {
-    const existingInvoices = localStorage.getItem('invoices');
-    if (!existingInvoices) {
-      localStorage.setItem('invoices', JSON.stringify([]));
-    }
-  }
-
-  private ensureProductsExist() {
-    const existingProducts = localStorage.getItem('products');
-    if (!existingProducts) {
-      // No default products - start with empty array
-      localStorage.setItem('products', JSON.stringify([]));
-    }
-  }
-
   async getInvoices(): Promise<ApiInvoice[]> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
-        resolve(invoices);
-      }, 100);
-    });
+    return await sqliteService.getInvoices();
   }
 
   async saveInvoice(invoice: ApiInvoice): Promise<void> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
-        const existingIndex = invoices.findIndex((inv: ApiInvoice) => inv.id === invoice.id);
-        
-        if (existingIndex >= 0) {
-          invoices[existingIndex] = invoice;
-        } else {
-          invoices.push(invoice);
-        }
-        
-        localStorage.setItem('invoices', JSON.stringify(invoices));
-        resolve();
-      }, 100);
-    });
+    await sqliteService.saveInvoice(invoice);
   }
 
   async deleteInvoice(invoiceId: string): Promise<void> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
-        const filteredInvoices = invoices.filter((inv: ApiInvoice) => inv.id !== invoiceId);
-        localStorage.setItem('invoices', JSON.stringify(filteredInvoices));
-        resolve();
-      }, 100);
-    });
+    await sqliteService.deleteInvoice(invoiceId);
   }
 
-  // Silent printing method for Windows
+  // Silent printing method for desktop
   async silentPrint(invoice: ApiInvoice, printerSettings: any): Promise<boolean> {
     try {
-      // For Windows silent printing, we need to use the native printing API
+      // For desktop app, use native printing
       if ('electronAPI' in window) {
-        // If running in Electron
         return (window as any).electronAPI.silentPrint(invoice, printerSettings);
       } else {
-        // For web browsers, use the standard printing with optimized settings
-        return this.webSilentPrint(invoice, printerSettings);
+        // For web version, use window print
+        return this.webPrint(invoice, printerSettings);
       }
     } catch (error) {
       console.error('Silent printing failed:', error);
@@ -124,39 +81,30 @@ class InvoiceApiService {
     }
   }
 
-  private async webSilentPrint(invoice: ApiInvoice, printerSettings: any): Promise<boolean> {
+  private async webPrint(invoice: ApiInvoice, printerSettings: any): Promise<boolean> {
     try {
       const printContent = this.generatePrintContent(invoice, printerSettings);
       
-      // Create a hidden iframe for printing
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'absolute';
-      iframe.style.left = '-9999px';
-      iframe.style.width = '0px';
-      iframe.style.height = '0px';
+      // Create a new window for printing
+      const printWindow = window.open('', '_blank', 'width=800,height=600');
       
-      document.body.appendChild(iframe);
-      
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (iframeDoc) {
-        iframeDoc.open();
-        iframeDoc.write(printContent);
-        iframeDoc.close();
+      if (printWindow) {
+        printWindow.document.write(printContent);
+        printWindow.document.close();
         
         // Wait for content to load then print
-        setTimeout(() => {
-          iframe.contentWindow?.print();
-          // Remove iframe after printing
+        printWindow.onload = () => {
           setTimeout(() => {
-            document.body.removeChild(iframe);
-          }, 1000);
-        }, 500);
+            printWindow.focus();
+            printWindow.print();
+          }, 500);
+        };
         
         return true;
       }
       return false;
     } catch (error) {
-      console.error('Web silent printing failed:', error);
+      console.error('Web printing failed:', error);
       return false;
     }
   }
@@ -187,6 +135,10 @@ class InvoiceApiService {
     const baseStyles = `
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body { font-family: 'Arial', sans-serif; color: #000; }
+      @media print { 
+        body { margin: 0; }
+        .no-print { display: none !important; }
+      }
     `;
     
     if (printerType === 'thermal') {
