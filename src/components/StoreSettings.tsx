@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +24,8 @@ const StoreSettings: React.FC<StoreSettingsProps> = () => {
     website: '',
     logo: '',
     paymentQR: '',
-    printFormat: 'a4'
+    printFormat: 'a4',
+    silentPrint: false
   });
   const { toast } = useToast();
 
@@ -34,7 +36,19 @@ const StoreSettings: React.FC<StoreSettingsProps> = () => {
   const loadSettings = () => {
     const savedStoreInfo = localStorage.getItem('storeInfo');
     if (savedStoreInfo) {
-      setStoreInfo(JSON.parse(savedStoreInfo));
+      const parsed = JSON.parse(savedStoreInfo);
+      setStoreInfo({
+        name: parsed.name || '',
+        address: parsed.address || '',
+        phone: parsed.phone || '',
+        email: parsed.email || '',
+        taxId: parsed.taxId || '',
+        website: parsed.website || '',
+        logo: parsed.logo || '',
+        paymentQR: parsed.paymentQR || '',
+        printFormat: parsed.printFormat || 'a4',
+        silentPrint: parsed.silentPrint || false
+      });
     }
   };
 
@@ -135,12 +149,15 @@ const StoreSettings: React.FC<StoreSettingsProps> = () => {
         <TabsContent value="preferences" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Preferences</CardTitle>
+              <CardTitle>Printing Preferences</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <Label htmlFor="printFormat">Print Format</Label>
-                <Select onValueChange={(value) => setStoreInfo({ ...storeInfo, printFormat: value as 'a4' | 'thermal' })}>
+                <Select 
+                  value={storeInfo.printFormat} 
+                  onValueChange={(value) => setStoreInfo({ ...storeInfo, printFormat: value as 'a4' | 'thermal' })}
+                >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select print format" />
                   </SelectTrigger>
@@ -150,6 +167,22 @@ const StoreSettings: React.FC<StoreSettingsProps> = () => {
                   </SelectContent>
                 </Select>
               </div>
+              
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="silentPrint"
+                  checked={storeInfo.silentPrint}
+                  onChange={(e) => setStoreInfo({ ...storeInfo, silentPrint: e.target.checked })}
+                  className="rounded"
+                />
+                <Label htmlFor="silentPrint" className="text-sm">
+                  Enable Silent Printing (Save without opening print dialog)
+                </Label>
+              </div>
+              <p className="text-xs text-gray-500">
+                When enabled, invoices will be saved directly without opening the print preview window.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>

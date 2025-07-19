@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,7 +32,6 @@ interface Invoice {
     quantity: number;
     rate: number;
     total: number;
-    volume?: string;
   }[];
   subtotal: number;
   tax: number;
@@ -102,7 +100,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
     }
   };
 
-  const getCurrentStoreSettings = (): { name: string; address: string; phone: string; email: string; taxId: string; website: string; logo?: string; paymentQR?: string; printFormat?: 'a4' | 'thermal'; } => {
+  const getCurrentStoreSettings = (): { name: string; address: string; phone: string; email: string; taxId: string; website: string; logo?: string; paymentQR?: string; printFormat?: 'a4' | 'thermal'; silentPrint?: boolean; } => {
     const storeInfo = localStorage.getItem('storeInfo');
     let storeSettings = {};
     if (storeInfo) {
@@ -121,7 +119,8 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
       website: (storeSettings as any).website || 'www.yourbusiness.com',
       logo: (storeSettings as any).logo || '',
       paymentQR: (storeSettings as any).paymentQR || '',
-      printFormat: (storeSettings as any).printFormat || 'a4'
+      printFormat: (storeSettings as any).printFormat || 'a4',
+      silentPrint: (storeSettings as any).silentPrint || false
     };
     return finalSettings;
   };
@@ -138,7 +137,6 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
 
   const generateA4InvoiceHTML = (invoice: Invoice, storeInfo: any, upiQRUrl: string) => {
     const hasColorCode = invoice.items.some((item) => item.colorCode && item.colorCode.trim() !== '');
-    const hasVolume = invoice.items.some((item) => item.volume && item.volume.trim() !== '');
     
     return `
       <!DOCTYPE html>
@@ -198,7 +196,6 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
               <tr>
                 <th>Product</th>
                 ${hasColorCode ? '<th>Color Code</th>' : ''}
-                ${hasVolume ? '<th>Volume</th>' : ''}
                 <th>Quantity</th>
                 <th>Rate</th>
                 <th>Total</th>
@@ -209,7 +206,6 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
                 <tr>
                   <td>${item.productName}</td>
                   ${hasColorCode ? `<td>${item.colorCode || '-'}</td>` : ''}
-                  ${hasVolume ? `<td>${item.volume || '-'}</td>` : ''}
                   <td>${item.quantity}</td>
                   <td>₹${item.rate.toFixed(2)}</td>
                   <td>₹${item.total.toFixed(2)}</td>
@@ -326,7 +322,6 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
                   <td style="width: 40%;">
                     ${item.productName}
                     ${item.colorCode && item.colorCode.trim() ? `<br/><small>${item.colorCode}</small>` : ''}
-                    ${item.volume && item.volume.trim() ? `<br/><small>${item.volume}</small>` : ''}
                   </td>
                   <td style="width: 15%;">${item.quantity}</td>
                   <td style="width: 20%;">₹${item.rate.toFixed(2)}</td>
@@ -400,24 +395,33 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
       // Save to file system
       await saveInvoicePDF(invoice.invoiceNumber, htmlContent);
 
-      // Create a new window for printing
-      const printWindow = window.open('', '_blank', 'width=800,height=600');
-      if (printWindow) {
-        printWindow.document.write(htmlContent);
-        printWindow.document.close();
-        
-        // Wait for content to load then print
-        printWindow.onload = () => {
-          setTimeout(() => {
-            printWindow.print();
-          }, 500);
-        };
-        
+      if (currentStoreInfo.silentPrint) {
+        // Silent print - just save and show success
         toast({
-          title: "Invoice Printed & Saved",
-          description: `Invoice ${invoice.invoiceNumber} has been printed and saved successfully.`,
+          title: "Invoice Saved",
+          description: `Invoice ${invoice.invoiceNumber} has been saved successfully.`,
           className: "bg-green-50 border-green-200 text-green-800"
         });
+      } else {
+        // Create a new window for printing
+        const printWindow = window.open('', '_blank', 'width=800,height=600');
+        if (printWindow) {
+          printWindow.document.write(htmlContent);
+          printWindow.document.close();
+          
+          // Wait for content to load then print
+          printWindow.onload = () => {
+            setTimeout(() => {
+              printWindow.print();
+            }, 500);
+          };
+          
+          toast({
+            title: "Invoice Printed & Saved",
+            description: `Invoice ${invoice.invoiceNumber} has been printed and saved successfully.`,
+            className: "bg-green-50 border-green-200 text-green-800"
+          });
+        }
       }
     } catch (error) {
       console.error('Printing error:', error);

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +17,6 @@ interface InvoiceItem {
   quantity: number;
   rate: number;
   total: number;
-  volume?: string;
 }
 
 interface Product {
@@ -26,7 +24,6 @@ interface Product {
   name: string;
   colorCode?: string;
   basePrice?: number;
-  volume?: string;
 }
 
 interface Customer {
@@ -64,7 +61,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
   const [products, setProducts] = useState<Product[]>([]);
   const { toast } = useToast();
 
-  const getCurrentStoreSettings = (): { name: string; address: string; phone: string; email: string; taxId: string; website: string; logo?: string; paymentQR?: string; printFormat?: 'a4' | 'thermal'; } => {
+  const getCurrentStoreSettings = (): { name: string; address: string; phone: string; email: string; taxId: string; website: string; logo?: string; paymentQR?: string; printFormat?: 'a4' | 'thermal'; silentPrint?: boolean; } => {
     const storeInfo = localStorage.getItem('storeInfo');
     let storeSettings = {};
     if (storeInfo) {
@@ -83,7 +80,8 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
       website: (storeSettings as any).website || 'www.yourbusiness.com',
       logo: (storeSettings as any).logo || '',
       paymentQR: (storeSettings as any).paymentQR || '',
-      printFormat: (storeSettings as any).printFormat || 'a4'
+      printFormat: (storeSettings as any).printFormat || 'a4',
+      silentPrint: (storeSettings as any).silentPrint || false
     };
     return finalSettings;
   };
@@ -152,8 +150,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
       colorCode: '',
       quantity: 1,
       rate: 0,
-      total: 0,
-      volume: ''
+      total: 0
     };
     setItems([initialItem]);
   }, [editInvoiceId]);
@@ -177,8 +174,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
       colorCode: '',
       quantity: 1,
       rate: 0,
-      total: 0,
-      volume: ''
+      total: 0
     };
     setItems([...items, newItem]);
   };
@@ -207,8 +203,8 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
     }
   };
 
-  const selectProduct = (productId: string, itemId: string) => {
-    const product = products.find(p => p.id === productId);
+  const selectProductFromDropdown = (productName: string, itemId: string) => {
+    const product = products.find(p => p.name === productName);
     if (product) {
       setItems(items.map(item => {
         if (item.id === itemId) {
@@ -217,7 +213,6 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
             productName: product.name,
             colorCode: product.colorCode || '',
             rate: product.basePrice || 0,
-            volume: product.volume || '',
             total: item.quantity * (product.basePrice || 0)
           };
           return updatedItem;
@@ -332,7 +327,6 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
 
   const generateA4InvoiceHTML = (invoice: any, currentStoreInfo: any, upiQRUrl: string) => {
     const hasColorCode = invoice.items.some((item: InvoiceItem) => item.colorCode && item.colorCode.trim() !== '');
-    const hasVolume = invoice.items.some((item: InvoiceItem) => item.volume && item.volume.trim() !== '');
     
     return `
       <!DOCTYPE html>
@@ -386,7 +380,6 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
               <tr>
                 <th>Product</th>
                 ${hasColorCode ? '<th>Color Code</th>' : ''}
-                ${hasVolume ? '<th>Volume</th>' : ''}
                 <th>Quantity</th>
                 <th>Rate</th>
                 <th>Total</th>
@@ -397,7 +390,6 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
                 <tr>
                   <td>${item.productName}</td>
                   ${hasColorCode ? `<td>${item.colorCode || '-'}</td>` : ''}
-                  ${hasVolume ? `<td>${item.volume || '-'}</td>` : ''}
                   <td>${item.quantity}</td>
                   <td>₹${item.rate.toFixed(2)}</td>
                   <td>₹${item.total.toFixed(2)}</td>
@@ -504,7 +496,6 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
                   <td style="width: 40%;">
                     ${item.productName}
                     ${item.colorCode && item.colorCode.trim() ? `<br/><small>${item.colorCode}</small>` : ''}
-                    ${item.volume && item.volume.trim() ? `<br/><small>${item.volume}</small>` : ''}
                   </td>
                   <td style="width: 15%;">${item.quantity}</td>
                   <td style="width: 20%;">₹${item.rate.toFixed(2)}</td>
@@ -558,27 +549,37 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
       // Save to local file system
       await saveInvoicePDF(invoiceNumber, htmlContent);
 
-      // Create a new window for printing
-      const printWindow = window.open('', '_blank', 'width=800,height=600');
-      if (printWindow) {
-        printWindow.document.write(htmlContent);
-        printWindow.document.close();
-        
-        // Wait for content to load then print
-        printWindow.onload = () => {
-          setTimeout(() => {
-            printWindow.print();
-            printWindow.close();
-          }, 500);
-        };
-        
+      if (currentStoreInfo.silentPrint) {
+        // Silent print - just save and show success
         toast({
-          title: "Invoice Printed & Saved",
-          description: `Invoice ${invoiceNumber} has been printed and saved successfully.`,
+          title: "Invoice Saved",
+          description: `Invoice ${invoiceNumber} has been saved successfully.`,
           className: "bg-green-50 border-green-200 text-green-800"
         });
-
         onClose(savedInvoice.id);
+      } else {
+        // Create a new window for printing
+        const printWindow = window.open('', '_blank', 'width=800,height=600');
+        if (printWindow) {
+          printWindow.document.write(htmlContent);
+          printWindow.document.close();
+          
+          // Wait for content to load then print
+          printWindow.onload = () => {
+            setTimeout(() => {
+              printWindow.print();
+              printWindow.close();
+            }, 500);
+          };
+          
+          toast({
+            title: "Invoice Printed & Saved",
+            description: `Invoice ${invoiceNumber} has been printed and saved successfully.`,
+            className: "bg-green-50 border-green-200 text-green-800"
+          });
+
+          onClose(savedInvoice.id);
+        }
       }
     } catch (error) {
       console.error('Printing error:', error);
@@ -789,24 +790,27 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
                   <div className="md:col-span-2">
                     <Label className="text-green-600">Product</Label>
                     <div className="space-y-2">
-                      <Select onValueChange={(productId) => selectProduct(productId, item.id)}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select product" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {products.map((product) => (
-                            <SelectItem key={product.id} value={product.id}>
-                              {product.name} - ₹{product.basePrice}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
                       <Input
-                        placeholder="Or type product name manually"
+                        list={`products-${item.id}`}
+                        placeholder="Type or select product name"
                         value={item.productName}
-                        onChange={(e) => updateItem(item.id, 'productName', e.target.value)}
+                        onChange={(e) => {
+                          updateItem(item.id, 'productName', e.target.value);
+                          // Check if the typed value matches a product
+                          const matchedProduct = products.find(p => p.name === e.target.value);
+                          if (matchedProduct) {
+                            selectProductFromDropdown(matchedProduct.name, item.id);
+                          }
+                        }}
                         required
                       />
+                      <datalist id={`products-${item.id}`}>
+                        {products.map((product) => (
+                          <option key={product.id} value={product.name}>
+                            {product.name} - ₹{product.basePrice}
+                          </option>
+                        ))}
+                      </datalist>
                     </div>
                   </div>
                   
@@ -816,15 +820,6 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
                       placeholder="Color code (optional)"
                       value={item.colorCode}
                       onChange={(e) => updateItem(item.id, 'colorCode', e.target.value)}
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label className="text-green-600">Volume</Label>
-                    <Input
-                      placeholder="Volume (optional)"
-                      value={item.volume}
-                      onChange={(e) => updateItem(item.id, 'volume', e.target.value)}
                     />
                   </div>
                   
@@ -851,7 +846,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
                     />
                   </div>
                   
-                  <div className="md:col-span-2">
+                  <div>
                     <Label className="text-green-600">Total</Label>
                     <div className="p-2 bg-green-100 rounded text-green-800 font-semibold">
                       ₹ {item.total.toFixed(2)}
