@@ -1,10 +1,12 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Eye, Edit, Trash2, Search, Filter, Plus, FileText, Calendar, DollarSign, Users } from "lucide-react";
+import { Eye, Edit, Trash2, Search, Filter, Plus, FileText, Calendar, DollarSign, Users, Printer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { saveInvoicePDF } from "../utils/fileSystem";
 
 interface Invoice {
   id: string;
@@ -100,11 +102,276 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
     }
   };
 
+  const getCurrentStoreSettings = (): { name: string; address: string; phone: string; email: string; taxId: string; website: string; logo?: string; paymentQR?: string; printFormat?: 'a4' | 'thermal'; } => {
+    const storeInfo = localStorage.getItem('storeInfo');
+    let storeSettings = {};
+    if (storeInfo) {
+      try {
+        storeSettings = JSON.parse(storeInfo);
+      } catch (e) {
+        console.error('Error parsing store settings:', e);
+      }
+    }
+    const finalSettings = {
+      name: (storeSettings as any).businessName || (storeSettings as any).name || 'Your Business Name',
+      address: (storeSettings as any).address || 'Your Business Address',
+      phone: (storeSettings as any).phone || '+91 00000 00000',
+      email: (storeSettings as any).email || 'your@email.com',
+      taxId: (storeSettings as any).gstNumber || (storeSettings as any).taxId || 'GST000000000',
+      website: (storeSettings as any).website || 'www.yourbusiness.com',
+      logo: (storeSettings as any).logo || '',
+      paymentQR: (storeSettings as any).paymentQR || '',
+      printFormat: (storeSettings as any).printFormat || 'a4'
+    };
+    return finalSettings;
+  };
+
+  const generateInvoiceHTML = (invoice: Invoice, storeInfo: any, upiQRUrl: string) => {
+    const printFormat = storeInfo.printFormat || 'a4';
+    
+    if (printFormat === 'thermal') {
+      return generateThermalInvoiceHTML(invoice, storeInfo, upiQRUrl);
+    }
+    
+    return generateA4InvoiceHTML(invoice, storeInfo, upiQRUrl);
+  };
+
+  const generateA4InvoiceHTML = (invoice: Invoice, storeInfo: any, upiQRUrl: string) => {
+    const hasColorCode = invoice.items.some((item) => item.colorCode && item.colorCode.trim() !== '');
+    const hasVolume = invoice.items.some((item) => item.volume && item.volume.trim() !== '');
+    
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Invoice ${invoice.invoiceNumber}</title>
+          <style>
+            body { font-family: Arial, sans-serif; font-size: 12px; margin: 20px; }
+            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
+            .header h1 { margin: 0; color: #333; }
+            .invoice-details { display: flex; justify-content: space-between; margin-bottom: 30px; }
+            .customer-details { margin-bottom: 30px; }
+            .items { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+            .items th, .items td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+            .items th { background-color: #f5f5f5; font-weight: bold; }
+            .totals { text-align: right; margin-bottom: 30px; }
+            .totals div { margin: 5px 0; }
+            .total-final { font-size: 16px; font-weight: bold; border-top: 2px solid #333; padding-top: 10px; }
+            .qr { text-align: center; margin: 20px 0; }
+            .qr img { width: 120px; height: 120px; }
+            .notes { margin-top: 20px; padding: 15px; background-color: #f9f9f9; border-left: 4px solid #333; }
+            .footer { text-align: center; margin-top: 40px; font-size: 10px; color: #666; }
+            .no-print { margin-top: 20px; text-align: center; }
+            .no-print button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 0 5px; }
+            @media print { 
+              body { margin: 0; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>${storeInfo.name}</h1>
+            <p>${storeInfo.address}</p>
+            <p>${storeInfo.phone} | ${storeInfo.email}</p>
+            ${storeInfo.taxId ? `<p>GST Number: ${storeInfo.taxId}</p>` : ''}
+          </div>
+          
+          <div class="invoice-details">
+            <div>
+              <h3>Invoice Details</h3>
+              <p><strong>Invoice Number:</strong> ${invoice.invoiceNumber}</p>
+              <p><strong>Date:</strong> ${new Date(invoice.date).toLocaleDateString()}</p>
+              <p><strong>Time:</strong> ${new Date().toLocaleTimeString()}</p>
+            </div>
+            <div>
+              <h3>Bill To:</h3>
+              <p><strong>${invoice.customerDetails.name}</strong></p>
+              <p>${invoice.customerDetails.phone}</p>
+              <p>${invoice.customerDetails.address}</p>
+              ${invoice.customerDetails.email ? `<p>${invoice.customerDetails.email}</p>` : ''}
+            </div>
+          </div>
+
+          <table class="items">
+            <thead>
+              <tr>
+                <th>Product</th>
+                ${hasColorCode ? '<th>Color Code</th>' : ''}
+                ${hasVolume ? '<th>Volume</th>' : ''}
+                <th>Quantity</th>
+                <th>Rate</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${invoice.items.map((item) => `
+                <tr>
+                  <td>${item.productName}</td>
+                  ${hasColorCode ? `<td>${item.colorCode || '-'}</td>` : ''}
+                  ${hasVolume ? `<td>${item.volume || '-'}</td>` : ''}
+                  <td>${item.quantity}</td>
+                  <td>₹${item.rate.toFixed(2)}</td>
+                  <td>₹${item.total.toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div class="totals" style="flex: 1;">
+              <div>Subtotal: ₹${invoice.subtotal.toFixed(2)}</div>
+              ${invoice.gstEnabled ? `<div>GST (18%): ₹${invoice.tax.toFixed(2)}</div>` : ''}
+              <div class="total-final">Total Amount: ₹${invoice.total.toFixed(2)}</div>
+            </div>
+            
+            ${upiQRUrl ? `
+              <div class="qr" style="flex: 0 0 140px; margin-left: 20px;">
+                <h4 style="margin: 0 0 10px 0;">Scan to Pay</h4>
+                <img src="${upiQRUrl}" alt="UPI QR Code" />
+              </div>
+            ` : ''}
+          </div>
+
+          ${invoice.notes ? `
+            <div class="notes">
+              <h4>Notes:</h4>
+              <p>${invoice.notes}</p>
+            </div>
+          ` : ''}
+
+          <div class="footer">
+            <p>Thank you for your business!</p>
+            <p>Generated on ${new Date().toLocaleString()}</p>
+          </div>
+
+          <div class="no-print">
+            <button onclick="window.print()">Print Invoice</button>
+            <button onclick="window.close()">Close</button>
+          </div>
+        </body>
+      </html>
+    `;
+  };
+
+  const generateThermalInvoiceHTML = (invoice: Invoice, storeInfo: any, upiQRUrl: string) => {
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Invoice ${invoice.invoiceNumber}</title>
+          <style>
+            @page { size: 80mm auto; margin: 2mm; }
+            body { 
+              font-family: 'Courier New', monospace; 
+              font-size: 10px; 
+              line-height: 1.2;
+              width: 72mm;
+              margin: 0;
+              padding: 2mm;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .line { border-bottom: 1px dashed #000; margin: 2px 0; }
+            .items { width: 100%; }
+            .items th, .items td { 
+              text-align: left; 
+              padding: 1px;
+              font-size: 9px;
+            }
+            .right { text-align: right; }
+            .qr { text-align: center; margin: 5px 0; }
+            .qr img { width: 35mm; height: 35mm; }
+            .no-print { margin-top: 5px; text-align: center; }
+            .no-print button { padding: 5px 10px; font-size: 8px; margin: 2px; }
+            @media print { 
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="center">
+            <div class="bold" style="font-size: 12px;">${storeInfo.name}</div>
+            <div>${storeInfo.address}</div>
+            <div>${storeInfo.phone}</div>
+            <div>${storeInfo.email}</div>
+            ${storeInfo.taxId ? `<div>GST: ${storeInfo.taxId}</div>` : ''}
+          </div>
+          <div class="line"></div>
+          <div>
+            <div><span class="bold">Invoice:</span> ${invoice.invoiceNumber}</div>
+            <div><span class="bold">Date:</span> ${new Date(invoice.date).toLocaleDateString()}</div>
+            <div><span class="bold">Time:</span> ${new Date().toLocaleTimeString()}</div>
+          </div>
+          <div class="line"></div>
+          <div>
+            <div class="bold">BILL TO:</div>
+            <div>${invoice.customerDetails.name}</div>
+            <div>${invoice.customerDetails.phone}</div>
+            <div>${invoice.customerDetails.address}</div>
+          </div>
+          <div class="line"></div>
+          <table class="items">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Rate</th>
+                <th>Amt</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${invoice.items.map((item) => `
+                <tr>
+                  <td style="width: 40%;">
+                    ${item.productName}
+                    ${item.colorCode && item.colorCode.trim() ? `<br/><small>${item.colorCode}</small>` : ''}
+                    ${item.volume && item.volume.trim() ? `<br/><small>${item.volume}</small>` : ''}
+                  </td>
+                  <td style="width: 15%;">${item.quantity}</td>
+                  <td style="width: 20%;">₹${item.rate.toFixed(2)}</td>
+                  <td style="width: 25%;" class="right">₹${item.total.toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="line"></div>
+          <div class="right">
+            <div>Subtotal: ₹${invoice.subtotal.toFixed(2)}</div>
+            ${invoice.gstEnabled ? `<div>GST (18%): ₹${invoice.tax.toFixed(2)}</div>` : ''}
+            <div class="bold" style="font-size: 11px;">Total: ₹${invoice.total.toFixed(2)}</div>
+          </div>
+          <div class="line"></div>
+          ${upiQRUrl ? `
+            <div class="qr">
+              <div class="bold">Scan to Pay</div>
+              <img src="${upiQRUrl}" alt="UPI QR" />
+            </div>
+          ` : ''}
+          ${invoice.notes ? `
+            <div class="line"></div>
+            <div><span class="bold">Notes:</span> ${invoice.notes}</div>
+          ` : ''}
+          <div class="line"></div>
+          <div class="center">
+            <div>Thank you for your business!</div>
+            <div style="font-size: 8px;">Generated on ${new Date().toLocaleString()}</div>
+          </div>
+          
+          <div class="no-print">
+            <button onclick="window.print()">Print</button>
+            <button onclick="window.close()">Close</button>
+          </div>
+        </body>
+      </html>
+    `;
+  };
+
   const viewInvoice = (invoice: Invoice) => {
     console.log('View invoice:', invoice);
     
     // Generate and open invoice HTML in new window
-    const currentStoreInfo = JSON.parse(localStorage.getItem('storeInfo') || '{}');
+    const currentStoreInfo = getCurrentStoreSettings();
     const upiQRUrl = invoice.savedQRCode || '';
     
     const htmlContent = generateInvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
@@ -116,119 +383,50 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
     }
   };
 
-  const generateInvoiceHTML = (invoice: Invoice, storeInfo: any, upiQRUrl: string) => {
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Invoice ${invoice.invoiceNumber}</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            .header { text-align: center; margin-bottom: 30px; }
-            .invoice-details { display: flex; justify-content: space-between; margin-bottom: 20px; }
-            .customer-details { margin-bottom: 20px; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background-color: #f2f2f2; }
-            .totals { text-align: right; margin-top: 20px; }
-            .footer { text-align: center; margin-top: 30px; color: #666; }
-            .qr { text-align: center; margin: 20px 0; }
-            .qr img { width: 150px; height: 150px; }
-            @media print { 
-              body { margin: 0; }
-              .no-print { display: none; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>${storeInfo.name || 'Store Name'}</h1>
-            <p>${storeInfo.address || 'Store Address'}</p>
-            <p>${storeInfo.phone || 'Phone'} | ${storeInfo.email || 'Email'}</p>
-            ${storeInfo.taxId ? `<p>GST: ${storeInfo.taxId}</p>` : ''}
-          </div>
-          
-          <div class="invoice-details">
-            <div><strong>Invoice #:</strong> ${invoice.invoiceNumber}</div>
-            <div><strong>Date:</strong> ${new Date(invoice.date).toLocaleDateString()}</div>
-          </div>
-          
-          <div class="customer-details">
-            <h3>Bill To:</h3>
-            <p><strong>${invoice.customerDetails.name}</strong></p>
-            <p>${invoice.customerDetails.address}</p>
-            <p>Phone: ${invoice.customerDetails.phone}</p>
-            ${invoice.customerDetails.email ? `<p>Email: ${invoice.customerDetails.email}</p>` : ''}
-          </div>
-          
-          <table>
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Color Code</th>
-                <th>Volume</th>
-                <th>Quantity</th>
-                <th>Rate</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${invoice.items.map(item => `
-                <tr>
-                  <td>${item.productName}</td>
-                  <td>${item.colorCode || '-'}</td>
-                  <td>${item.volume || '-'}</td>
-                  <td>${item.quantity}</td>
-                  <td>₹${item.rate.toFixed(2)}</td>
-                  <td>₹${item.total.toFixed(2)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-          
-          <div class="totals">
-            <div>Subtotal: ₹${invoice.subtotal.toFixed(2)}</div>
-            ${invoice.gstEnabled ? `<div>GST (18%): ₹${invoice.tax.toFixed(2)}</div>` : ''}
-            <div style="font-size: 1.2em; font-weight: bold;">Total: ₹${invoice.total.toFixed(2)}</div>
-          </div>
-          
-          ${upiQRUrl ? `
-            <div class="qr">
-              <h4>Scan to Pay</h4>
-              <img src="${upiQRUrl}" alt="UPI QR Code" />
-            </div>
-          ` : ''}
-          
-          ${invoice.notes ? `
-            <div style="margin-top: 20px;">
-              <h4>Notes:</h4>
-              <p>${invoice.notes}</p>
-            </div>
-          ` : ''}
-          
-          <div class="footer">
-            <p>Thank you for your business!</p>
-            <p>Generated on ${new Date().toLocaleString()}</p>
-          </div>
-          
-          <div class="no-print" style="margin-top: 20px; text-align: center;">
-            <button onclick="window.print()" style="padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Print Invoice</button>
-          </div>
-        </body>
-      </html>
-    `;
-  };
+  const printInvoice = async (invoice: Invoice) => {
+    try {
+      console.log('Printing invoice from list...');
+      
+      const currentStoreInfo = getCurrentStoreSettings();
+      const upiQRUrl = invoice.savedQRCode || '';
 
-  const getTotalRevenue = () => {
-    return invoices.reduce((sum, invoice) => sum + invoice.total, 0);
-  };
+      let htmlContent;
+      if (currentStoreInfo.printFormat === 'thermal') {
+        htmlContent = generateThermalInvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
+      } else {
+        htmlContent = generateA4InvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
+      }
 
-  const getPaidRevenue = () => {
-    return invoices.filter(inv => inv.status === 'paid').reduce((sum, invoice) => sum + invoice.total, 0);
-  };
+      // Save to file system
+      await saveInvoicePDF(invoice.invoiceNumber, htmlContent);
 
-  const getUnpaidRevenue = () => {
-    return invoices.filter(inv => inv.status === 'unpaid').reduce((sum, invoice) => sum + invoice.total, 0);
+      // Create a new window for printing
+      const printWindow = window.open('', '_blank', 'width=800,height=600');
+      if (printWindow) {
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+        
+        // Wait for content to load then print
+        printWindow.onload = () => {
+          setTimeout(() => {
+            printWindow.print();
+          }, 500);
+        };
+        
+        toast({
+          title: "Invoice Printed & Saved",
+          description: `Invoice ${invoice.invoiceNumber} has been printed and saved successfully.`,
+          className: "bg-green-50 border-green-200 text-green-800"
+        });
+      }
+    } catch (error) {
+      console.error('Printing error:', error);
+      toast({
+        title: "Printing Error",
+        description: "An error occurred while printing. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -342,13 +540,23 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
                       variant="outline"
                       size="sm"
                       onClick={() => viewInvoice(invoice)}
+                      title="View Invoice"
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={() => printInvoice(invoice)}
+                      title="Print Invoice"
+                    >
+                      <Printer className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => onEditInvoice?.(invoice.id)}
+                      title="Edit Invoice"
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -357,6 +565,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
                       size="sm"
                       onClick={() => deleteInvoice(invoice.id)}
                       className="text-red-600 hover:text-red-700"
+                      title="Delete Invoice"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

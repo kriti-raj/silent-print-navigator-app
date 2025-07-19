@@ -327,8 +327,8 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
   };
 
   const generateA4InvoiceHTML = (invoice: any, currentStoreInfo: any, upiQRUrl: string) => {
-    const hasColorCode = invoice.items.some((item: InvoiceItem) => item.colorCode);
-    const hasVolume = invoice.items.some((item: InvoiceItem) => item.volume);
+    const hasColorCode = invoice.items.some((item: InvoiceItem) => item.colorCode && item.colorCode.trim() !== '');
+    const hasVolume = invoice.items.some((item: InvoiceItem) => item.volume && item.volume.trim() !== '');
     
     return `
       <!DOCTYPE html>
@@ -499,8 +499,8 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
                 <tr>
                   <td style="width: 40%;">
                     ${item.productName}
-                    ${item.colorCode ? `<br/><small>${item.colorCode}</small>` : ''}
-                    ${item.volume ? `<br/><small>${item.volume}</small>` : ''}
+                    ${item.colorCode && item.colorCode.trim() ? `<br/><small>${item.colorCode}</small>` : ''}
+                    ${item.volume && item.volume.trim() ? `<br/><small>${item.volume}</small>` : ''}
                   </td>
                   <td style="width: 15%;">${item.quantity}</td>
                   <td style="width: 20%;">₹${item.rate.toFixed(2)}</td>
