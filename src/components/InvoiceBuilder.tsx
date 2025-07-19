@@ -93,17 +93,26 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose }) => {
     const yy = String(today.getFullYear()).slice(-2);
     const datePrefix = `${dd}${mm}${yy}`;
     
-    // Get today's invoices to determine sequence number
+    // Get all invoices to find the highest number for today
     const savedInvoices = JSON.parse(localStorage.getItem('invoices') || '[]');
     const todayInvoices = savedInvoices.filter((inv: any) => {
-      const invDate = new Date(inv.date);
-      const today = new Date();
-      return invDate.getDate() === today.getDate() && 
-             invDate.getMonth() === today.getMonth() && 
-             invDate.getFullYear() === today.getFullYear();
+      return inv.invoiceNumber && inv.invoiceNumber.startsWith(datePrefix);
     });
     
-    const sequenceNumber = String(todayInvoices.length + 1).padStart(3, '0');
+    // Find the highest sequence number for today
+    let maxSequence = 0;
+    todayInvoices.forEach((inv: any) => {
+      const parts = inv.invoiceNumber.split('-');
+      if (parts.length === 2) {
+        const sequenceNum = parseInt(parts[1]);
+        if (!isNaN(sequenceNum) && sequenceNum > maxSequence) {
+          maxSequence = sequenceNum;
+        }
+      }
+    });
+    
+    const nextSequence = maxSequence + 1;
+    const sequenceNumber = String(nextSequence).padStart(3, '0');
     return `${datePrefix}-${sequenceNumber}`;
   };
 

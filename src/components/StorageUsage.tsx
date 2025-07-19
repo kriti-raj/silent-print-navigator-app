@@ -2,7 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Trash2, HardDrive, FileText, Users, Package } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -14,6 +16,8 @@ const StorageUsage: React.FC = () => {
     settings: { count: 0, size: 0 },
     total: 0
   });
+  const [password, setPassword] = useState('');
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -75,16 +79,26 @@ const StorageUsage: React.FC = () => {
   };
 
   const clearAllData = () => {
-    if (confirm('Are you sure you want to clear all data? This action cannot be undone.')) {
-      localStorage.clear();
-      calculateStorageUsage();
-      
+    const correctPassword = '8409950052';
+    if (password !== correctPassword) {
       toast({
-        title: "All Data Cleared",
-        description: "All application data has been removed from storage.",
+        title: "Incorrect Password",
+        description: "Please enter the correct password to clear all data.",
         variant: "destructive"
       });
+      return;
     }
+
+    localStorage.clear();
+    calculateStorageUsage();
+    setPassword('');
+    setShowPasswordDialog(false);
+    
+    toast({
+      title: "All Data Cleared",
+      description: "All application data has been removed from storage.",
+      variant: "destructive"
+    });
   };
 
   const storageLimit = 5 * 1024 * 1024; // 5MB typical localStorage limit
@@ -107,11 +121,15 @@ const StorageUsage: React.FC = () => {
         <CardContent className="bg-white rounded-b-lg space-y-4">
           <div className="flex justify-between items-center">
             <span className="text-lg font-semibold">{formatBytes(storageData.total)}</span>
-            <span className="text-sm text-gray-500">of ~{formatBytes(storageLimit)} available</span>
+            <span className="text-sm text-gray-500">of ~{formatBytes(storageLimit)} browser storage</span>
           </div>
           <Progress value={usagePercentage} className="w-full" />
           <div className="text-sm text-gray-600">
-            {usagePercentage.toFixed(1)}% of estimated storage limit used
+            {usagePercentage.toFixed(1)}% of browser storage limit used
+          </div>
+          <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded">
+            <strong>Note:</strong> Browser storage is limited to ~5-10MB. For larger storage needs, 
+            consider exporting your data regularly or using external storage solutions.
           </div>
         </CardContent>
       </Card>
@@ -219,22 +237,68 @@ const StorageUsage: React.FC = () => {
               Clear Invoices Older Than 30 Days
             </Button>
             
-            <Button
-              onClick={clearAllData}
-              variant="outline"
-              className="w-full border-red-200 hover:bg-red-50 text-red-600"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Clear All Data (Dangerous)
-            </Button>
+            <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-full border-red-200 hover:bg-red-50 text-red-600"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Clear All Data (Password Protected)
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle className="text-red-600">Clear All Data</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-600">
+                    This action will permanently delete all your invoices, customers, products, and settings. 
+                    This cannot be undone.
+                  </p>
+                  <div>
+                    <label htmlFor="password" className="block text-sm font-medium mb-2">
+                      Enter Password:
+                    </label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Enter password to confirm"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowPasswordDialog(false);
+                        setPassword('');
+                      }}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={clearAllData}
+                      variant="destructive"
+                      className="flex-1"
+                    >
+                      Clear All Data
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
           
           <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
             <p className="font-semibold mb-1">Storage Tips:</p>
             <ul className="list-disc list-inside space-y-1">
-              <li>Regularly clear old invoices to free up space</li>
-              <li>Export important data before clearing</li>
-              <li>Browser storage limit is typically around 5-10MB</li>
+              <li>Browser storage is limited to 5-10MB per domain</li>
+              <li>Regularly export and backup important data</li>
+              <li>Clear old invoices periodically to free up space</li>
+              <li>For mobile apps, data can be stored in device folders</li>
             </ul>
           </div>
         </CardContent>
