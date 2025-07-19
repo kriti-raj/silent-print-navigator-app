@@ -5,6 +5,7 @@ import Customers from "../components/Customers";
 import Invoices from "../components/Invoices";
 import InvoiceBuilder from "../components/InvoiceBuilder";
 import ProtectedReports from "../components/ProtectedReports";
+import FolderSettings from "../components/FolderSettings";
 import StoreSettings from "../components/StoreSettings";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -117,12 +118,13 @@ const Index = () => {
         </div>
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-6 bg-gradient-to-r from-purple-100 to-blue-100">
+          <TabsList className="grid w-full grid-cols-7 bg-gradient-to-r from-purple-100 to-blue-100">
             <TabsTrigger value="dashboard" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-blue-500 data-[state=active]:text-white">Dashboard</TabsTrigger>
             <TabsTrigger value="invoices" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white">Invoices</TabsTrigger>
             <TabsTrigger value="products" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-green-600 data-[state=active]:text-white">Products</TabsTrigger>
             <TabsTrigger value="customers" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-orange-600 data-[state=active]:text-white">Customers</TabsTrigger>
             <TabsTrigger value="reports" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500 data-[state=active]:to-red-600 data-[state=active]:text-white">Reports</TabsTrigger>
+            <TabsTrigger value="folders" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white">File Storage</TabsTrigger>
             <TabsTrigger value="settings" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-gray-500 data-[state=active]:to-gray-600 data-[state=active]:text-white">Settings</TabsTrigger>
           </TabsList>
 
@@ -258,6 +260,10 @@ const Index = () => {
 
           <TabsContent value="reports" className="space-y-6">
             <ProtectedReports />
+          </TabsContent>
+
+          <TabsContent value="folders" className="space-y-6">
+            <FolderSettings />
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-6">

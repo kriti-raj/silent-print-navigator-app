@@ -1,7 +1,5 @@
 
-import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
-import { Capacitor } from '@capacitor/core';
-
+// File system utilities for PC/Desktop application
 export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string) => {
   try {
     const currentDate = new Date();
@@ -13,76 +11,99 @@ export const saveInvoicePDF = async (invoiceNumber: string, htmlContent: string)
     const folderPath = `Invoices/${year}/${month}/${day}`;
     const fullPath = `${folderPath}/${fileName}`;
 
-    if (Capacitor.isNativePlatform()) {
+    // For desktop applications, we'll use the File System Access API if available
+    // Otherwise fall back to automatic downloads with organized folder structure
+    
+    if ('showDirectoryPicker' in window) {
       try {
-        // Create directory structure for native platforms
-        await Filesystem.mkdir({
-          path: folderPath,
-          directory: Directory.Documents,
-          recursive: true
-        });
-
-        // Write file to native filesystem
-        await Filesystem.writeFile({
-          path: fullPath,
-          data: htmlContent,
-          directory: Directory.Documents,
-          encoding: Encoding.UTF8
-        });
-
-        console.log(`Invoice ${invoiceNumber} saved to native folder: ${folderPath}`);
+        // Use File System Access API for modern browsers
+        const savedFolderHandle = localStorage.getItem('selectedFolderHandle');
+        let dirHandle;
         
+        if (!savedFolderHandle) {
+          // First time - ask user to select a folder
+          dirHandle = await (window as any).showDirectoryPicker({
+            mode: 'readwrite'
+          });
+          
+          // Store the folder selection preference
+          localStorage.setItem('folderSelected', 'true');
+          console.log('Folder selected for invoice storage');
+        } else {
+          // Try to use the same folder (note: handles can't be serialized, so we'll ask again)
+          dirHandle = await (window as any).showDirectoryPicker({
+            mode: 'readwrite'
+          });
+        }
+
+        // Create nested directories: Invoices/YYYY/MM/DD
+        const invoicesDir = await dirHandle.getDirectoryHandle('Invoices', { create: true });
+        const yearDir = await invoicesDir.getDirectoryHandle(year.toString(), { create: true });
+        const monthDir = await yearDir.getDirectoryHandle(month, { create: true });
+        const dayDir = await monthDir.getDirectoryHandle(day, { create: true });
+
+        // Create and write the file
+        const fileHandle = await dayDir.getFileHandle(fileName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(htmlContent);
+        await writable.close();
+
+        console.log(`Invoice ${invoiceNumber} saved to desktop folder: ${folderPath}`);
+        console.log(`File name: ${fileName}`);
+
         return {
           success: true,
           folderPath: folderPath,
           fileName,
-          nativePath: true
+          method: 'filesystem-api'
         };
-      } catch (nativeError) {
-        console.error('Native file system error, falling back to localStorage:', nativeError);
-        // Fall back to localStorage if native filesystem fails
+      } catch (fsError) {
+        console.log('File System Access API failed or cancelled, falling back to download');
+        // Fall through to download method
       }
     }
 
-    // Fallback to localStorage for web or if native fails
-    const savedInvoices = JSON.parse(localStorage.getItem('savedInvoicePDFs') || '{}');
+    // Fallback: Auto-download to Downloads folder with organized naming
+    const organiziedFileName = `${year}-${month}-${day}_Invoice_${invoiceNumber}.html`;
     
-    // Create folder structure
-    if (!savedInvoices[year]) savedInvoices[year] = {};
-    if (!savedInvoices[year][month]) savedInvoices[year][month] = {};
-    if (!savedInvoices[year][month][day]) savedInvoices[year][month][day] = {};
-    
-    // Save invoice content with proper file name
-    savedInvoices[year][month][day][invoiceNumber] = {
-      fileName,
-      content: htmlContent,
-      timestamp: currentDate.toISOString(),
-      folderPath: folderPath,
-      fullPath: fullPath
-    };
-    
-    localStorage.setItem('savedInvoicePDFs', JSON.stringify(savedInvoices));
-    
-    console.log(`Invoice ${invoiceNumber} saved to folder: ${folderPath}`);
-    console.log(`File name: ${fileName}`);
-    
-    // For web environment, create a downloadable file
     const blob = new Blob([htmlContent], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = fileName;
+    link.download = organiziedFileName;
     
-    // Auto-download for web users
+    // Auto-download the file
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
     
     URL.revokeObjectURL(url);
+
+    // Also save to localStorage for app tracking
+    const savedInvoices = JSON.parse(localStorage.getItem('savedInvoicePDFs') || '{}');
+    
+    if (!savedInvoices[year]) savedInvoices[year] = {};
+    if (!savedInvoices[year][month]) savedInvoices[year][month] = {};
+    if (!savedInvoices[year][month][day]) savedInvoices[year][month][day] = {};
+    
+    savedInvoices[year][month][day][invoiceNumber] = {
+      fileName: organiziedFileName,
+      timestamp: currentDate.toISOString(),
+      folderPath: folderPath,
+      fullPath: fullPath,
+      downloadedFileName: organiziedFileName
+    };
+    
+    localStorage.setItem('savedInvoicePDFs', JSON.stringify(savedInvoices));
+    
+    console.log(`Invoice ${invoiceNumber} downloaded as: ${organiziedFileName}`);
+    console.log(`Organized in Downloads folder with date prefix`);
     
     return {
       success: true,
       folderPath: folderPath,
-      fileName,
-      nativePath: false
+      fileName: organiziedFileName,
+      method: 'download'
     };
   } catch (error) {
     console.error('Error saving invoice PDF:', error);
