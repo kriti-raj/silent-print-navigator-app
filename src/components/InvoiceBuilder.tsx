@@ -546,11 +546,11 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
         htmlContent = generateInvoiceHTML(savedInvoice, currentStoreInfo, upiQRUrl);
       }
 
-      // Save to local file system
-      await saveInvoicePDF(invoiceNumber, htmlContent);
-
       if (currentStoreInfo.silentPrint) {
-        // Silent print - just save and show success
+        // Silent print - save file and skip print dialog
+        console.log('Silent printing enabled - saving file only');
+        await saveInvoicePDF(invoiceNumber, htmlContent);
+        
         toast({
           title: "Invoice Saved",
           description: `Invoice ${invoiceNumber} has been saved successfully.`,
@@ -558,28 +558,41 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
         });
         onClose(savedInvoice.id);
       } else {
-        // Create a new window for printing
-        const printWindow = window.open('', '_blank', 'width=800,height=600');
-        if (printWindow) {
-          printWindow.document.write(htmlContent);
-          printWindow.document.close();
-          
-          // Wait for content to load then print
-          printWindow.onload = () => {
-            setTimeout(() => {
-              printWindow.print();
-              printWindow.close();
-            }, 500);
-          };
-          
-          toast({
-            title: "Invoice Printed & Saved",
-            description: `Invoice ${invoiceNumber} has been printed and saved successfully.`,
-            className: "bg-green-50 border-green-200 text-green-800"
-          });
+        // Regular print - open print dialog
+        console.log('Opening print dialog');
+        
+        // Save the file first
+        await saveInvoicePDF(invoiceNumber, htmlContent);
+        
+        // Create a new window for printing with a delay to avoid download interference
+        setTimeout(() => {
+          const printWindow = window.open('', '_blank', 'width=800,height=600');
+          if (printWindow) {
+            printWindow.document.write(htmlContent);
+            printWindow.document.close();
+            
+            // Wait for content to load then print
+            printWindow.onload = () => {
+              setTimeout(() => {
+                printWindow.focus(); // Bring print window to front
+                printWindow.print();
+                
+                // Close after a delay to ensure print dialog appears
+                setTimeout(() => {
+                  printWindow.close();
+                }, 1000);
+              }, 500);
+            };
+            
+            toast({
+              title: "Invoice Printed & Saved",
+              description: `Invoice ${invoiceNumber} has been printed and saved successfully.`,
+              className: "bg-green-50 border-green-200 text-green-800"
+            });
 
-          onClose(savedInvoice.id);
-        }
+            onClose(savedInvoice.id);
+          }
+        }, 200); // Small delay to let download complete first
       }
     } catch (error) {
       console.error('Printing error:', error);

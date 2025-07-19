@@ -7,10 +7,15 @@ import { useToast } from "@/hooks/use-toast";
 const FolderSettings: React.FC = () => {
   const [folderSelected, setFolderSelected] = useState(false);
   const [storageInfo, setStorageInfo] = useState({ used: 0, available: 0 });
+  const [folderName, setFolderName] = useState('');
   const { toast } = useToast();
 
   useEffect(() => {
     setFolderSelected(localStorage.getItem('folderSelected') === 'true');
+    const savedFolderName = localStorage.getItem('selectedFolderName');
+    if (savedFolderName) {
+      setFolderName(savedFolderName);
+    }
     calculateStorageInfo();
   }, []);
 
@@ -39,19 +44,26 @@ const FolderSettings: React.FC = () => {
     if ('showDirectoryPicker' in window) {
       try {
         const dirHandle = await (window as any).showDirectoryPicker({
-          mode: 'readwrite'
+          mode: 'readwrite',
+          startIn: 'documents'
         });
         
         localStorage.setItem('folderSelected', 'true');
+        localStorage.setItem('selectedFolderName', dirHandle.name || 'Selected Folder');
         setFolderSelected(true);
+        setFolderName(dirHandle.name || 'Selected Folder');
         
         toast({
           title: "Folder Selected",
-          description: "All invoices will now be saved to your selected folder with organized subfolders (Invoices/YYYY/MM/DD/)",
+          description: `All invoices will now be saved to "${dirHandle.name}" with organized subfolders (Invoices/YYYY/MM/DD/)`,
           className: "bg-green-50 border-green-200 text-green-800"
         });
       } catch (error) {
         console.log('Folder selection cancelled');
+        toast({
+          title: "Folder Selection Cancelled",
+          description: "No folder was selected. Invoices will be downloaded to your Downloads folder.",
+        });
       }
     } else {
       toast({
@@ -64,11 +76,13 @@ const FolderSettings: React.FC = () => {
 
   const resetFolderSelection = () => {
     localStorage.removeItem('folderSelected');
+    localStorage.removeItem('selectedFolderName');
     setFolderSelected(false);
+    setFolderName('');
     
     toast({
       title: "Folder Reset",
-      description: "Next invoice will ask you to select a folder again.",
+      description: "Next invoice will be downloaded to your Downloads folder.",
     });
   };
 
@@ -96,7 +110,10 @@ const FolderSettings: React.FC = () => {
             <div>
               <h4 className="font-medium">Storage Folder</h4>
               <p className="text-sm text-gray-600">
-                {folderSelected ? 'Folder selected - invoices will be saved with organized structure' : 'No folder selected - invoices will download to Downloads folder'}
+                {folderSelected 
+                  ? `Folder selected: "${folderName}" - invoices will be saved with organized structure`
+                  : 'No folder selected - invoices will download to Downloads folder'
+                }
               </p>
             </div>
             <div className="flex gap-2">
