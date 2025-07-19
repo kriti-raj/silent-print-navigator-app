@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -5,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Eye, Edit, Trash2, Search, Plus, FileText, Printer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { fileSystemService } from "../services/fileSystemService";
+import { saveInvoicePDF } from "../utils/fileSystem";
 import { sqliteService } from '../services/sqliteService';
 
 interface Invoice {
@@ -27,17 +28,16 @@ interface Invoice {
   };
   date: string;
   items: {
-    id: string;
-    productName: string;
-    colorCode: string;
+    productId: string;
+    name: string;
     quantity: number;
-    rate: number;
-    total: number;
+    price: number;
+    unit: string;
   }[];
   subtotal: number;
   tax: number;
   total: number;
-  status: 'paid' | 'unpaid';
+  status: 'draft' | 'sent' | 'paid' | 'overdue';
   notes: string;
   watermarkId: string;
   gstEnabled: boolean;
@@ -53,7 +53,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'sent' | 'paid' | 'overdue'>('all');
   const { toast } = useToast();
 
   useEffect(() => {
@@ -62,7 +62,9 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
 
   const loadInvoices = async () => {
     try {
+      console.log('Loading invoices from SQLite...');
       const loadedInvoices = await sqliteService.getInvoices();
+      console.log('Loaded invoices:', loadedInvoices);
       setInvoices(loadedInvoices);
     } catch (error) {
       console.error('Error loading invoices:', error);
@@ -157,7 +159,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
   };
 
   const generateA4InvoiceHTML = (invoice: Invoice, storeInfo: any, upiQRUrl: string) => {
-    const hasColorCode = invoice.items.some((item) => item.colorCode && item.colorCode.trim() !== '');
+    const hasColorCode = invoice.items.some((item: any) => item.colorCode && item.colorCode.trim() !== '');
     
     return `
       <!DOCTYPE html>
@@ -216,20 +218,20 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
             <thead>
               <tr>
                 <th>Product</th>
-                ${hasColorCode ? '<th>Color Code</th>' : ''}
                 <th>Quantity</th>
                 <th>Rate</th>
+                <th>Unit</th>
                 <th>Total</th>
               </tr>
             </thead>
             <tbody>
               ${invoice.items.map((item) => `
                 <tr>
-                  <td>${item.productName}</td>
-                  ${hasColorCode ? `<td>${item.colorCode || '-'}</td>` : ''}
+                  <td>${item.name}</td>
                   <td>${item.quantity}</td>
-                  <td>₹${item.rate.toFixed(2)}</td>
-                  <td>₹${item.total.toFixed(2)}</td>
+                  <td>₹${(item.price || 0).toFixed(2)}</td>
+                  <td>${item.unit || 'pieces'}</td>
+                  <td>₹${((item.price || 0) * item.quantity).toFixed(2)}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -245,7 +247,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
             ${upiQRUrl ? `
               <div class="qr" style="flex: 0 0 140px; margin-left: 20px;">
                 <h4 style="margin: 0 0 10px 0;">Scan to Pay</h4>
-                <img src="${upiQRUrl}" alt="UPI QR Code" />
+                <img src="data:image/svg+xml;base64,${btoa(upiQRUrl)}" alt="UPI QR Code" />
               </div>
             ` : ''}
           </div>
@@ -340,13 +342,10 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
             <tbody>
               ${invoice.items.map((item) => `
                 <tr>
-                  <td style="width: 40%;">
-                    ${item.productName}
-                    ${item.colorCode && item.colorCode.trim() ? `<br/><small>${item.colorCode}</small>` : ''}
-                  </td>
+                  <td style="width: 40%;">${item.name}</td>
                   <td style="width: 15%;">${item.quantity}</td>
-                  <td style="width: 20%;">₹${item.rate.toFixed(2)}</td>
-                  <td style="width: 25%;" class="right">₹${item.total.toFixed(2)}</td>
+                  <td style="width: 20%;">₹${(item.price || 0).toFixed(2)}</td>
+                  <td style="width: 25%;" class="right">₹${((item.price || 0) * item.quantity).toFixed(2)}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -361,7 +360,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
           ${upiQRUrl ? `
             <div class="qr">
               <div class="bold">Scan to Pay</div>
-              <img src="${upiQRUrl}" alt="UPI QR" />
+              <img src="data:image/svg+xml;base64,${btoa(upiQRUrl)}" alt="UPI QR" />
             </div>
           ` : ''}
           ${invoice.notes ? `
@@ -384,17 +383,26 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
   };
 
   const viewInvoice = async (invoice: Invoice) => {
-    console.log('View invoice:', invoice);
-    
-    const currentStoreInfo = await getCurrentStoreSettings();
-    const upiQRUrl = invoice.savedQRCode || '';
-    
-    const htmlContent = generateInvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
-    
-    const newWindow = window.open('', '_blank', 'width=800,height=600');
-    if (newWindow) {
-      newWindow.document.write(htmlContent);
-      newWindow.document.close();
+    try {
+      console.log('View invoice:', invoice);
+      
+      const currentStoreInfo = await getCurrentStoreSettings();
+      const upiQRUrl = invoice.savedQRCode || '';
+      
+      const htmlContent = generateInvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
+      
+      const newWindow = window.open('', '_blank', 'width=800,height=600');
+      if (newWindow) {
+        newWindow.document.write(htmlContent);
+        newWindow.document.close();
+      }
+    } catch (error) {
+      console.error('Error viewing invoice:', error);
+      toast({
+        title: "Error",
+        description: "Failed to view invoice. Please try again.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -405,12 +413,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
       const currentStoreInfo = await getCurrentStoreSettings();
       const upiQRUrl = invoice.savedQRCode || '';
 
-      let htmlContent;
-      if (currentStoreInfo.printFormat === 'thermal') {
-        htmlContent = generateThermalInvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
-      } else {
-        htmlContent = generateA4InvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
-      }
+      const htmlContent = generateInvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
 
       const printWindow = window.open('', '_blank', 'width=800,height=600');
       if (printWindow) {
@@ -447,14 +450,9 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
       const currentStoreInfo = await getCurrentStoreSettings();
       const upiQRUrl = invoice.savedQRCode || '';
 
-      let htmlContent;
-      if (currentStoreInfo.printFormat === 'thermal') {
-        htmlContent = generateThermalInvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
-      } else {
-        htmlContent = generateA4InvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
-      }
+      const htmlContent = generateInvoiceHTML(invoice, currentStoreInfo, upiQRUrl);
 
-      const result = await fileSystemService.saveInvoicePDF(invoice.invoiceNumber, htmlContent);
+      const result = await saveInvoicePDF(invoice.invoiceNumber, htmlContent);
 
       if (result.success) {
         toast({
@@ -483,7 +481,7 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Invoices (SQLite Database)</h2>
+        <h2 className="text-2xl font-bold">Invoices</h2>
         <Button onClick={onCreateInvoice} className="bg-blue-600 hover:bg-blue-700">
           <Plus className="mr-2 h-4 w-4" />
           Create New Invoice
@@ -527,6 +525,20 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
                 All
               </Button>
               <Button
+                variant={statusFilter === 'draft' ? 'default' : 'outline'}
+                onClick={() => setStatusFilter('draft')}
+                size="sm"
+              >
+                Draft
+              </Button>
+              <Button
+                variant={statusFilter === 'sent' ? 'default' : 'outline'}
+                onClick={() => setStatusFilter('sent')}
+                size="sm"
+              >
+                Sent
+              </Button>
+              <Button
                 variant={statusFilter === 'paid' ? 'default' : 'outline'}
                 onClick={() => setStatusFilter('paid')}
                 size="sm"
@@ -534,11 +546,11 @@ const Invoices: React.FC<InvoicesProps> = ({ onCreateInvoice, onEditInvoice }) =
                 Paid
               </Button>
               <Button
-                variant={statusFilter === 'unpaid' ? 'default' : 'outline'}
-                onClick={() => setStatusFilter('unpaid')}
+                variant={statusFilter === 'overdue' ? 'default' : 'outline'}
+                onClick={() => setStatusFilter('overdue')}
                 size="sm"
               >
-                Unpaid
+                Overdue
               </Button>
             </div>
           </div>

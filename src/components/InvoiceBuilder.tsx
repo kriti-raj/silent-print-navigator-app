@@ -258,7 +258,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
     try {
       await sqliteService.saveProduct(newProduct);
       
-      // Add the new product to the top of the list for immediate access
+      // Add the new product to the TOP of the list for immediate access
       setProducts(prevProducts => [newProduct, ...prevProducts]);
       
       // Select the new product immediately
@@ -277,7 +277,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
 
       toast({
         title: "Product Added",
-        description: `${newProduct.name} has been added and selected.`,
+        description: `${newProduct.name} has been added and selected automatically.`,
         className: "bg-green-50 border-green-200 text-green-800"
       });
     } catch (error) {
@@ -329,6 +329,17 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
 
       await sqliteService.saveInvoice(invoice);
 
+      // Auto-save invoice to selected folder if available
+      try {
+        const { autoSaveInvoice } = await import('../utils/fileSystem');
+        const autoSaveResult = await autoSaveInvoice(invoice);
+        if (autoSaveResult.success) {
+          console.log('Invoice auto-saved to folder:', autoSaveResult.filePath);
+        }
+      } catch (autoSaveError) {
+        console.log('Auto-save not available or failed:', autoSaveError);
+      }
+
       // Also save customer if it's new
       const existingCustomer = customers.find(c => 
         c.phone === customerDetails.phone && c.name === customerDetails.name
@@ -345,11 +356,12 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
           createdAt: new Date().toISOString()
         };
         await sqliteService.saveCustomer(newCustomer);
+        console.log('New customer saved:', newCustomer);
       }
 
       toast({
         title: "Invoice Saved",
-        description: `Invoice #${invoiceNumber} has been saved successfully.`,
+        description: `Invoice #${invoiceNumber} has been saved successfully and auto-saved to your selected folder.`,
         className: "bg-green-50 border-green-200 text-green-800"
       });
 
@@ -463,7 +475,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
                   <DialogHeader>
                     <DialogTitle>Add New Product</DialogTitle>
                     <DialogDescription>
-                      Create a new product to add to your inventory.
+                      Create a new product to add to your inventory. It will appear at the top of the product list.
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
@@ -516,21 +528,18 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
                   <Button type="submit" onClick={addNewProduct}>Add Product</Button>
                 </DialogContent>
               </Dialog>
+              
               <Select value={selectedProduct?.id} onValueChange={(value) => setSelectedProduct(products.find(p => p.id === value) || null)}>
                 <SelectTrigger className="border-purple-200 focus:ring-purple-500">
                   <SelectValue placeholder="Select a product" />
                 </SelectTrigger>
                 <SelectContent>
-                  {showNewProductForm && (
-                    <SelectItem value="new" className="font-bold text-green-600">
-                      + Add New Product
-                    </SelectItem>
-                  )}
                   {products.map((product) => (
                     <SelectItem key={product.id} value={product.id}>{product.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                 <div>
                   <Label htmlFor="quantity">Quantity</Label>
@@ -549,6 +558,7 @@ const InvoiceBuilder: React.FC<InvoiceBuilderProps> = ({ onClose, editInvoiceId 
                 </div>
               </div>
 
+              {/* Items Table */}
               {items.length > 0 && (
                 <div className="overflow-x-auto">
                   <table className="w-full table-auto">
