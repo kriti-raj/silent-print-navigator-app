@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Save, X, User, Search, Phone, MapPin, FileText, Eye, IndianRupee } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { sqliteService } from '../services/sqliteService';
 
 interface Customer {
   id: string;
@@ -50,20 +50,28 @@ const Customers: React.FC = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    const savedCustomers = localStorage.getItem('customers');
-    if (savedCustomers) {
-      setCustomers(JSON.parse(savedCustomers));
-    }
-
-    const savedInvoices = localStorage.getItem('invoices');
-    if (savedInvoices) {
-      setInvoices(JSON.parse(savedInvoices));
-    }
+    loadData();
   }, []);
 
-  const saveCustomers = (updatedCustomers: Customer[]) => {
-    localStorage.setItem('customers', JSON.stringify(updatedCustomers));
-    setCustomers(updatedCustomers);
+  const loadData = async () => {
+    try {
+      console.log('Loading customers and invoices from SQLite...');
+      const [loadedCustomers, loadedInvoices] = await Promise.all([
+        sqliteService.getCustomers(),
+        sqliteService.getInvoices()
+      ]);
+      console.log('Loaded customers:', loadedCustomers);
+      console.log('Loaded invoices:', loadedInvoices);
+      setCustomers(loadedCustomers);
+      setInvoices(loadedInvoices);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load data from database.",
+        variant: "destructive"
+      });
+    }
   };
 
   const getCustomerInvoices = (customerName: string, customerPhone: string) => {
@@ -82,34 +90,42 @@ const Customers: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (editingCustomer) {
-      const updatedCustomers = customers.map(c =>
-        c.id === editingCustomer.id ? { ...formData, id: editingCustomer.id, createdAt: editingCustomer.createdAt } : c
-      );
-      saveCustomers(updatedCustomers);
+    try {
+      if (editingCustomer) {
+        const updatedCustomer = { ...formData, id: editingCustomer.id, createdAt: editingCustomer.createdAt };
+        await sqliteService.saveCustomer(updatedCustomer);
+        toast({
+          title: "Customer Updated",
+          description: `${formData.name} has been updated successfully.`,
+          className: "bg-blue-50 border-blue-200 text-blue-800"
+        });
+      } else {
+        const newCustomer: Customer = {
+          ...formData,
+          id: Date.now().toString(),
+          createdAt: new Date().toISOString()
+        };
+        await sqliteService.saveCustomer(newCustomer);
+        toast({
+          title: "Customer Added",
+          description: `${formData.name} has been added successfully.`,
+          className: "bg-green-50 border-green-200 text-green-800"
+        });
+      }
+
+      await loadData();
+      resetForm();
+    } catch (error) {
+      console.error('Error saving customer:', error);
       toast({
-        title: "Customer Updated",
-        description: `${formData.name} has been updated successfully.`,
-        className: "bg-blue-50 border-blue-200 text-blue-800"
-      });
-    } else {
-      const newCustomer: Customer = {
-        ...formData,
-        id: Date.now().toString(),
-        createdAt: new Date().toISOString()
-      };
-      saveCustomers([...customers, newCustomer]);
-      toast({
-        title: "Customer Added",
-        description: `${formData.name} has been added successfully.`,
-        className: "bg-green-50 border-green-200 text-green-800"
+        title: "Error",
+        description: "Failed to save customer to database.",
+        variant: "destructive"
       });
     }
-
-    resetForm();
   };
 
   const resetForm = () => {
@@ -130,14 +146,23 @@ const Customers: React.FC = () => {
     setShowForm(true);
   };
 
-  const handleDelete = (id: string) => {
-    const updatedCustomers = customers.filter(c => c.id !== id);
-    saveCustomers(updatedCustomers);
-    toast({
-      title: "Customer Deleted",
-      description: "Customer has been deleted successfully.",
-      className: "bg-red-50 border-red-200 text-red-800"
-    });
+  const handleDelete = async (id: string) => {
+    try {
+      await sqliteService.deleteCustomer(id);
+      await loadData();
+      toast({
+        title: "Customer Deleted",
+        description: "Customer has been deleted successfully.",
+        className: "bg-red-50 border-red-200 text-red-800"
+      });
+    } catch (error) {
+      console.error('Error deleting customer:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete customer from database.",
+        variant: "destructive"
+      });
+    }
   };
 
   const filteredCustomers = customers.filter(customer =>
@@ -151,7 +176,7 @@ const Customers: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">Customers</h2>
-          <p className="text-muted-foreground">Manage your customer database</p>
+          <p className="text-muted-foreground">Manage your customer database (SQLite Database)</p>
         </div>
         <Button onClick={() => setShowForm(true)} className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600">
           <Plus className="mr-2 h-4 w-4" />

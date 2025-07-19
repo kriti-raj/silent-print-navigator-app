@@ -1,447 +1,411 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { BarChart3, TrendingUp, IndianRupee, Calendar, Download, FileText, Users, Package, Sparkles, QrCode } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Download, Upload, Trash2, FileText, Users, Package, Calendar, Database, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { sqliteService } from '../services/sqliteService';
+import { fileSystemService } from '../services/fileSystemService';
 
-interface ReportData {
-  totalRevenue: number;
-  totalInvoices: number;
-  totalCustomers: number;
-  totalProducts: number;
-  todayRevenue: number;
-  todayInvoices: number;
-  monthlyRevenue: { month: string; revenue: number }[];
-  topProducts: { name: string; quantity: number; revenue: number }[];
-  recentInvoices: any[];
+interface ExportData {
+  invoices: any[];
+  customers: any[];
+  products: any[];
+  storeSettings: any;
+  exportDate: string;
+  version: string;
 }
 
 const Reports: React.FC = () => {
-  const [reportData, setReportData] = useState<ReportData>({
-    totalRevenue: 0,
+  const [clearDuration, setClearDuration] = useState<string>('30');
+  const [customDays, setCustomDays] = useState<string>('');
+  const [stats, setStats] = useState({
     totalInvoices: 0,
     totalCustomers: 0,
     totalProducts: 0,
-    todayRevenue: 0,
-    todayInvoices: 0,
-    monthlyRevenue: [],
-    topProducts: [],
-    recentInvoices: []
+    dbSize: 0
   });
-
-  const [dateRange, setDateRange] = useState('30');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [upiSettings, setUpiSettings] = useState({
-    upiString: 'upi://pay?pa=paytmqr5fhvnj@ptys&pn=Mirtunjay+Kumar&tn=Invoice+Payment&am=${amount}&cu=INR'
-  });
-
   const { toast } = useToast();
 
   useEffect(() => {
-    generateReport();
-    loadUpiSettings();
-  }, [dateRange, startDate, endDate]);
+    loadStats();
+  }, []);
 
-  const loadUpiSettings = () => {
-    const savedSettings = localStorage.getItem('upiSettings');
-    if (savedSettings) {
-      setUpiSettings(JSON.parse(savedSettings));
+  const loadStats = async () => {
+    try {
+      const [invoices, customers, products] = await Promise.all([
+        sqliteService.getInvoices(),
+        sqliteService.getCustomers(),
+        sqliteService.getProducts()
+      ]);
+
+      const storageUsage = sqliteService.getStorageUsage();
+
+      setStats({
+        totalInvoices: invoices.length,
+        totalCustomers: customers.length,
+        totalProducts: products.length,
+        dbSize: storageUsage.used
+      });
+    } catch (error) {
+      console.error('Error loading stats:', error);
     }
   };
 
-  const saveUpiSettings = () => {
-    localStorage.setItem('upiSettings', JSON.stringify(upiSettings));
-    toast({
-      title: "UPI Settings Saved",
-      description: "Your UPI payment settings have been updated successfully."
-    });
+  const exportAllData = async () => {
+    try {
+      toast({
+        title: "Exporting Data",
+        description: "Preparing data export...",
+        className: "bg-blue-50 border-blue-200 text-blue-800"
+      });
+
+      const [invoices, customers, products, storeSettings] = await Promise.all([
+        sqliteService.getInvoices(),
+        sqliteService.getCustomers(),
+        sqliteService.getProducts(),
+        sqliteService.getAllStoreSettings()
+      ]);
+
+      const exportData: ExportData = {
+        invoices,
+        customers,
+        products,
+        storeSettings,
+        exportDate: new Date().toISOString(),
+        version: '1.0'
+      };
+
+      const jsonData = JSON.stringify(exportData, null, 2);
+      const fileName = `business_data_export_${new Date().toISOString().split('T')[0]}.json`;
+
+      // Try to save to selected folder, otherwise download
+      const result = await fileSystemService.saveInvoicePDF(fileName.replace('.json', ''), jsonData);
+      
+      if (result.success) {
+        toast({
+          title: "Export Successful",
+          description: `Data exported to ${result.filePath}`,
+          className: "bg-green-50 border-green-200 text-green-800"
+        });
+      } else {
+        // Fallback to browser download
+        const blob = new Blob([jsonData], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        toast({
+          title: "Export Complete",
+          description: `Data downloaded as ${fileName}`,
+          className: "bg-green-50 border-green-200 text-green-800"
+        });
+      }
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      toast({
+        title: "Export Failed",
+        description: "Failed to export data. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const generateReport = () => {
-    const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
-    const customers = JSON.parse(localStorage.getItem('customers') || '[]');
-    const products = JSON.parse(localStorage.getItem('products') || '[]');
+  const importData = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-    // Calculate today's metrics
-    const todayInvoices = invoices.filter((inv: any) =>
-      new Date(inv.date).toDateString() === new Date().toDateString()
-    );
-    const todayRevenue = todayInvoices.reduce((sum: number, inv: any) => sum + inv.total, 0);
+    try {
+      toast({
+        title: "Importing Data",
+        description: "Processing import file...",
+        className: "bg-blue-50 border-blue-200 text-blue-800"
+      });
 
-    // Filter invoices based on date range
-    let filteredInvoices = invoices;
-    if (dateRange !== 'all') {
-      const days = parseInt(dateRange);
+      const text = await file.text();
+      const importData: ExportData = JSON.parse(text);
+
+      // Validate import data structure
+      if (!importData.invoices || !importData.customers || !importData.products) {
+        throw new Error('Invalid import file format');
+      }
+
+      // Import data to SQLite
+      let importedCount = 0;
+
+      // Import customers
+      for (const customer of importData.customers) {
+        await sqliteService.saveCustomer(customer);
+        importedCount++;
+      }
+
+      // Import products
+      for (const product of importData.products) {
+        await sqliteService.saveProduct(product);
+        importedCount++;
+      }
+
+      // Import invoices
+      for (const invoice of importData.invoices) {
+        await sqliteService.saveInvoice(invoice);
+        importedCount++;
+      }
+
+      // Import store settings
+      if (importData.storeSettings) {
+        for (const [key, value] of Object.entries(importData.storeSettings)) {
+          await sqliteService.saveStoreSetting(key, value as string);
+        }
+      }
+
+      await loadStats();
+
+      toast({
+        title: "Import Successful",
+        description: `Successfully imported ${importedCount} records from ${importData.exportDate}`,
+        className: "bg-green-50 border-green-200 text-green-800"
+      });
+
+      // Reset file input
+      event.target.value = '';
+    } catch (error) {
+      console.error('Error importing data:', error);
+      toast({
+        title: "Import Failed",
+        description: "Failed to import data. Please check the file format.",
+        variant: "destructive"
+      });
+      event.target.value = '';
+    }
+  };
+
+  const clearOldInvoices = async () => {
+    try {
+      const days = clearDuration === 'custom' ? parseInt(customDays) : parseInt(clearDuration);
+      
+      if (isNaN(days) || days <= 0) {
+        toast({
+          title: "Invalid Duration",
+          description: "Please enter a valid number of days.",
+          variant: "destructive"
+        });
+        return;
+      }
+
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - days);
-      
-      filteredInvoices = invoices.filter((invoice: any) => 
-        new Date(invoice.date) >= cutoffDate
+
+      const invoices = await sqliteService.getInvoices();
+      const invoicesToDelete = invoices.filter(invoice => 
+        new Date(invoice.date) < cutoffDate
       );
-    }
 
-    if (startDate && endDate) {
-      filteredInvoices = invoices.filter((invoice: any) => {
-        const invoiceDate = new Date(invoice.date);
-        return invoiceDate >= new Date(startDate) && invoiceDate <= new Date(endDate);
+      if (invoicesToDelete.length === 0) {
+        toast({
+          title: "No Data to Clear",
+          description: `No invoices older than ${days} days found.`,
+          className: "bg-blue-50 border-blue-200 text-blue-800"
+        });
+        return;
+      }
+
+      for (const invoice of invoicesToDelete) {
+        await sqliteService.deleteInvoice(invoice.id);
+      }
+
+      await loadStats();
+
+      toast({
+        title: "Data Cleared",
+        description: `Successfully deleted ${invoicesToDelete.length} invoices older than ${days} days.`,
+        className: "bg-green-50 border-green-200 text-green-800"
+      });
+    } catch (error) {
+      console.error('Error clearing old invoices:', error);
+      toast({
+        title: "Clear Failed",
+        description: "Failed to clear old invoices. Please try again.",
+        variant: "destructive"
       });
     }
-
-    // Calculate basic metrics
-    const totalRevenue = filteredInvoices.reduce((sum: number, inv: any) => sum + inv.total, 0);
-    const totalInvoices = invoices.length; // Use all invoices for total count
-    const totalCustomers = customers.length;
-    const totalProducts = products.length;
-
-    // Calculate monthly revenue
-    const monthlyRevenue = getMonthlyRevenue(filteredInvoices);
-
-    // Calculate top products
-    const topProducts = getTopProducts(filteredInvoices);
-
-    // Get recent invoices
-    const recentInvoices = filteredInvoices
-      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 5);
-
-    setReportData({
-      totalRevenue,
-      totalInvoices,
-      totalCustomers,
-      totalProducts,
-      todayRevenue,
-      todayInvoices: todayInvoices.length,
-      monthlyRevenue,
-      topProducts,
-      recentInvoices
-    });
-  };
-
-  const getMonthlyRevenue = (invoices: any[]) => {
-    const monthlyData: { [key: string]: number } = {};
-    
-    invoices.forEach(invoice => {
-      const date = new Date(invoice.date);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      monthlyData[monthKey] = (monthlyData[monthKey] || 0) + invoice.total;
-    });
-
-    return Object.entries(monthlyData)
-      .map(([month, revenue]) => ({ month, revenue }))
-      .sort((a, b) => a.month.localeCompare(b.month))
-      .slice(-6);
-  };
-
-  const getTopProducts = (invoices: any[]) => {
-    const productData: { [key: string]: { quantity: number; revenue: number } } = {};
-    
-    invoices.forEach(invoice => {
-      invoice.items.forEach((item: any) => {
-        const productName = item.productName || 'Unknown Product';
-        if (!productData[productName]) {
-          productData[productName] = { quantity: 0, revenue: 0 };
-        }
-        productData[productName].quantity += item.quantity;
-        productData[productName].revenue += item.total;
-      });
-    });
-
-    return Object.entries(productData)
-      .map(([name, data]) => ({ name, ...data }))
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5);
-  };
-
-  const exportReport = () => {
-    const reportContent = `
-BILLING BUDDY - SALES REPORT
-Generated on: ${new Date().toLocaleDateString()}
-Date Range: ${dateRange === 'all' ? 'All Time' : `Last ${dateRange} days`}
-${startDate && endDate ? `Custom Range: ${startDate} to ${endDate}` : ''}
-
-SUMMARY:
-- Total Revenue: ₹${reportData.totalRevenue.toFixed(2)}
-- Total Invoices: ${reportData.totalInvoices}
-- Today's Revenue: ₹${reportData.todayRevenue.toFixed(2)}
-- Today's Invoices: ${reportData.todayInvoices}
-- Total Customers: ${reportData.totalCustomers}
-- Total Products: ${reportData.totalProducts}
-
-TOP PRODUCTS:
-${reportData.topProducts.map(product => 
-  `- ${product.name}: ${product.quantity} units, ₹${product.revenue.toFixed(2)} revenue`
-).join('\n')}
-
-MONTHLY REVENUE:
-${reportData.monthlyRevenue.map(month => 
-  `- ${month.month}: ₹${month.revenue.toFixed(2)}`
-).join('\n')}
-
-RECENT INVOICES:
-${reportData.recentInvoices.map(invoice => 
-  `- Invoice #${invoice.invoiceNumber}: ${invoice.customerDetails.name} - ₹${invoice.total.toFixed(2)} (${new Date(invoice.date).toLocaleDateString()})`
-).join('\n')}
-    `;
-
-    const blob = new Blob([reportContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `billing-buddy-report-${new Date().toISOString().split('T')[0]}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Report Filters</CardTitle>
-          <CardDescription>Choose the time period for your report</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <Label htmlFor="dateRange">Quick Select</Label>
-              <Select value={dateRange} onValueChange={setDateRange}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="7">Last 7 days</SelectItem>
-                  <SelectItem value="30">Last 30 days</SelectItem>
-                  <SelectItem value="90">Last 90 days</SelectItem>
-                  <SelectItem value="365">Last year</SelectItem>
-                  <SelectItem value="all">All time</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="startDate">Start Date</Label>
-              <Input
-                id="startDate"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="endDate">End Date</Label>
-              <Input
-                id="endDate"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
-            <div className="flex items-end">
-              <Button onClick={exportReport} className="w-full">
-                <Download className="mr-2 h-4 w-4" />
-                Export Report
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="space-y-6 bg-gradient-to-br from-red-50 via-pink-50 to-purple-50 p-6 rounded-lg">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold bg-gradient-to-r from-red-600 to-purple-600 bg-clip-text text-transparent">Reports & Data Management</h2>
+          <p className="text-muted-foreground">Export, import, and manage your business data (SQLite Database)</p>
+        </div>
+      </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium opacity-90">Today's Revenue</CardTitle>
-            <Sparkles className="h-4 w-4 opacity-80" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₹{reportData.todayRevenue.toFixed(2)}</div>
-            <p className="text-xs opacity-80">
-              From {reportData.todayInvoices} invoices
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium opacity-90">Today's Invoices</CardTitle>
-            <FileText className="h-4 w-4 opacity-80" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{reportData.todayInvoices}</div>
-            <p className="text-xs opacity-80">
-              Invoices today
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <IndianRupee className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₹{reportData.totalRevenue.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">
-              All time revenue
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
+      {/* Database Statistics */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="shadow-lg border-0 bg-gradient-to-br from-blue-500 to-purple-600 text-white">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Invoices</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
+            <FileText className="h-4 w-4" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{reportData.totalInvoices}</div>
-            <p className="text-xs text-muted-foreground">
-              All invoices generated
-            </p>
+            <div className="text-2xl font-bold">{stats.totalInvoices}</div>
           </CardContent>
         </Card>
-      </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
-        <Card>
+        <Card className="shadow-lg border-0 bg-gradient-to-br from-green-500 to-blue-500 text-white">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <Users className="h-4 w-4" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{reportData.totalCustomers}</div>
-            <p className="text-xs text-muted-foreground">
-              Registered customers
-            </p>
+            <div className="text-2xl font-bold">{stats.totalCustomers}</div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="shadow-lg border-0 bg-gradient-to-br from-orange-500 to-red-500 text-white">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Products</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+            <Package className="h-4 w-4" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{reportData.totalProducts}</div>
+            <div className="text-2xl font-bold">{stats.totalProducts}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-lg border-0 bg-gradient-to-br from-purple-500 to-pink-500 text-white">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Database Size</CardTitle>
+            <Database className="h-4 w-4" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{(stats.dbSize / 1024).toFixed(1)}KB</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Export/Import Section */}
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-green-50">
+          <CardHeader>
+            <CardTitle className="text-green-800 flex items-center gap-2">
+              <Download className="h-5 w-5" />
+              Export Data
+            </CardTitle>
+            <CardDescription>
+              Export all your business data (invoices, customers, products, settings) to a JSON file for backup or migration.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button 
+              onClick={exportAllData}
+              className="w-full bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Export All Data
+            </Button>
             <p className="text-xs text-muted-foreground">
-              Products in inventory
+              This will create a complete backup of your business data that can be imported later.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-blue-50">
+          <CardHeader>
+            <CardTitle className="text-blue-800 flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Import Data
+            </CardTitle>
+            <CardDescription>
+              Import business data from a previously exported JSON file. This will add to your existing data.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Input
+                type="file"
+                accept=".json"
+                onChange={importData}
+                className="border-blue-200 focus:ring-blue-500"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Select a JSON file exported from this application to import data.
             </p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Monthly Revenue Trend
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {reportData.monthlyRevenue.map((month, index) => (
-                <div key={month.month} className="flex items-center justify-between">
-                  <span className="text-sm font-medium">
-                    {new Date(month.month + '-01').toLocaleDateString('en-US', { 
-                      year: 'numeric', 
-                      month: 'short' 
-                    })}
-                  </span>
-                  <span className="text-sm font-bold">₹{month.revenue.toFixed(2)}</span>
-                </div>
-              ))}
-              {reportData.monthlyRevenue.length === 0 && (
-                <p className="text-center text-muted-foreground py-4">No data available</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              Top Selling Products
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {reportData.topProducts.map((product, index) => (
-                <div key={product.name} className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">{product.name}</p>
-                    <p className="text-xs text-muted-foreground">{product.quantity} units sold</p>
-                  </div>
-                  <span className="text-sm font-bold">₹{product.revenue.toFixed(2)}</span>
-                </div>
-              ))}
-              {reportData.topProducts.length === 0 && (
-                <p className="text-center text-muted-foreground py-4">No products data available</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
+      {/* Data Cleanup Section */}
+      <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-red-50">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <QrCode className="h-5 w-5" />
-            UPI Payment Settings
+          <CardTitle className="text-red-800 flex items-center gap-2">
+            <Trash2 className="h-5 w-5" />
+            Data Cleanup
           </CardTitle>
           <CardDescription>
-            Configure your UPI payment link for invoice QR codes
+            Clear old invoice data to keep your database optimized. This action cannot be undone.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div>
-            <Label htmlFor="upiString">UPI Payment Link</Label>
-            <Textarea
-              id="upiString"
-              value={upiSettings.upiString}
-              onChange={(e) => setUpiSettings({ ...upiSettings, upiString: e.target.value })}
-              placeholder="upi://pay?pa=your-upi-id@bank&pn=Your+Name&tn=Invoice+Payment&am=${amount}&cu=INR"
-              className="font-mono text-sm"
-              rows={3}
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Use ${'{'}amount{'}'} as placeholder for the invoice amount. This will be replaced automatically when generating QR codes.
-            </p>
-          </div>
-          <Button onClick={saveUpiSettings}>
-            Save UPI Settings
-          </Button>
-        </CardContent>
-      </Card>
+          <Alert className="border-orange-200 bg-orange-50">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="text-orange-800">
+              Warning: This will permanently delete old invoices. Make sure to export your data first for backup.
+            </AlertDescription>
+          </Alert>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            Recent Invoices
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {reportData.recentInvoices.map((invoice) => (
-              <div key={invoice.id} className="flex items-center justify-between border-b pb-2">
-                <div>
-                  <p className="text-sm font-medium">Invoice #{invoice.invoiceNumber}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {invoice.customerDetails.name} • {new Date(invoice.date).toLocaleDateString()}
-                  </p>
-                </div>
-                <span className="text-sm font-bold">₹{invoice.total.toFixed(2)}</span>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Label htmlFor="clearDuration">Clear invoices older than:</Label>
+              <Select value={clearDuration} onValueChange={setClearDuration}>
+                <SelectTrigger className="border-red-200 focus:ring-red-500">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7">7 days</SelectItem>
+                  <SelectItem value="15">15 days</SelectItem>
+                  <SelectItem value="30">30 days</SelectItem>
+                  <SelectItem value="60">60 days</SelectItem>
+                  <SelectItem value="90">90 days</SelectItem>
+                  <SelectItem value="180">6 months</SelectItem>
+                  <SelectItem value="365">1 year</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {clearDuration === 'custom' && (
+              <div>
+                <Label htmlFor="customDays">Custom days:</Label>
+                <Input
+                  id="customDays"
+                  type="number"
+                  min="1"
+                  value={customDays}
+                  onChange={(e) => setCustomDays(e.target.value)}
+                  placeholder="Enter number of days"
+                  className="border-red-200 focus:ring-red-500"
+                />
               </div>
-            ))}
-            {reportData.recentInvoices.length === 0 && (
-              <p className="text-center text-muted-foreground py-4">No recent invoices</p>
             )}
           </div>
+
+          <Button 
+            onClick={clearOldInvoices}
+            variant="destructive"
+            className="bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Clear Old Invoices
+          </Button>
         </CardContent>
       </Card>
     </div>

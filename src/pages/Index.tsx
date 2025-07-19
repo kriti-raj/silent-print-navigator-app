@@ -11,6 +11,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileText, Users, Package, Plus, Eye, Calendar } from "lucide-react";
+import { sqliteService } from '../services/sqliteService';
 
 const Index = () => {
   const [activeView, setActiveView] = useState<'dashboard' | 'invoice'>('dashboard');
@@ -36,33 +37,44 @@ const Index = () => {
     }
   }, [activeView]);
 
-  const loadStoreInfo = () => {
-    const savedStoreInfo = localStorage.getItem('storeInfo');
-    if (savedStoreInfo) {
-      setStoreInfo(JSON.parse(savedStoreInfo));
+  const loadStoreInfo = async () => {
+    try {
+      const settings = await sqliteService.getAllStoreSettings();
+      setStoreInfo(settings);
+    } catch (error) {
+      console.error('Error loading store info:', error);
     }
   };
 
-  const calculateDashboardStats = () => {
-    // Load store info
-    loadStoreInfo();
-    
-    // Calculate dashboard stats
-    const invoices = JSON.parse(localStorage.getItem('invoices') || '[]');
-    const customers = JSON.parse(localStorage.getItem('customers') || '[]');
-    const products = JSON.parse(localStorage.getItem('products') || '[]');
-    
-    const today = new Date().toDateString();
-    const todayInvoices = invoices.filter((invoice: any) => 
-      new Date(invoice.date).toDateString() === today
-    );
+  const calculateDashboardStats = async () => {
+    try {
+      console.log('Calculating dashboard stats from SQLite...');
+      // Load store info
+      await loadStoreInfo();
+      
+      // Calculate dashboard stats from SQLite
+      const [invoices, customers, products] = await Promise.all([
+        sqliteService.getInvoices(),
+        sqliteService.getCustomers(),
+        sqliteService.getProducts()
+      ]);
 
-    setDashboardStats({
-      totalInvoices: invoices.length,
-      totalCustomers: customers.length,
-      totalProducts: products.length,
-      todayInvoices: todayInvoices.length
-    });
+      console.log('SQLite data loaded:', { invoices: invoices.length, customers: customers.length, products: products.length });
+      
+      const today = new Date().toDateString();
+      const todayInvoices = invoices.filter((invoice: any) => 
+        new Date(invoice.date).toDateString() === today
+      );
+
+      setDashboardStats({
+        totalInvoices: invoices.length,
+        totalCustomers: customers.length,
+        totalProducts: products.length,
+        todayInvoices: todayInvoices.length
+      });
+    } catch (error) {
+      console.error('Error calculating dashboard stats:', error);
+    }
   };
 
   const handleCreateInvoice = () => {
